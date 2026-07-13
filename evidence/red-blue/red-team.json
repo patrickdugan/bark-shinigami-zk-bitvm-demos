@@ -1,0 +1,123 @@
+{
+  "schema": "bark-bitvm-red-team-attacks-v1",
+  "all_attacks_reproduced": true,
+  "expected_process_exit": 0,
+  "threat_boundary": "UTXORef verifies disclosed-bit consistency; it does not observe STWO, Shinigami, or Bark truth.",
+  "attacks": {
+    "false_all_ones_graph": {
+      "attack": "signed-false-facts_all-ones-public-trace",
+      "external_facts_committed_in_signed_checkpoint": {
+        "claim_binding_matches": false,
+        "pinned_stwo_statement_verified": false,
+        "shinigami_engine_check_verified": false
+      },
+      "operator_disclosed_trace_values": {
+        "claim_binding_matches": 1,
+        "pinned_stwo_statement_verified": 1,
+        "proof_bound": 1,
+        "shinigami_engine_check_verified": 1,
+        "authorization_assertion": 1
+      },
+      "self_selected_checkpoint_signer_verified": true,
+      "public_trace_verified": true,
+      "graph_verified": true,
+      "fraud_count": 0,
+      "disprove_constructible": false,
+      "disprove_error": "the public trace contains no constructible fraud proof",
+      "co_signed_settlement_witness_ready": true,
+      "operator_controls_demo_challenger": true,
+      "graph_hash": "f26ff80f5405debdc19e2d765c5fc2ad1a38e1ab99c4ca9216398b59998cbdfa",
+      "reproduced": true
+    },
+    "linear_binding_collisions": [
+      {
+        "fixture": "generic-owner-exit",
+        "family": "amount-plus-one_delay-minus-thirty-one",
+        "changed_field_indexes": [
+          22,
+          23
+        ],
+        "original": {
+          "amount_sats": "100000",
+          "exit_delay": "144",
+          "input_sha256": "5e341808c92820f3fd78ce4ac7687658005fdd0308de9dc26d88cf9b0632be1b"
+        },
+        "collision": {
+          "amount_sats": "100001",
+          "exit_delay": "113",
+          "input_sha256": "12a3ebe69221663259e2a064633b45049802a10a3a728e43eb6cb7edb5c22914"
+        },
+        "binding_commitment": "0x4d4226614ba0e3cf8e3061925ddcc0f4ee8d463a5a",
+        "binding_unchanged": true,
+        "claim_changed": true,
+        "cairo_binding_check_still_passes": true
+      },
+      {
+        "fixture": "generic-owner-exit",
+        "family": "settlement-high-plus-seventeen_low-minus-thirty-one",
+        "changed_field_indexes": [
+          20,
+          21
+        ],
+        "original": {
+          "high_limb": "0x8b8cd30852f4edbd86df233402d4ca88",
+          "low_limb": "0x1fab9e765c7669731c9c120db7946855",
+          "input_sha256": "5e341808c92820f3fd78ce4ac7687658005fdd0308de9dc26d88cf9b0632be1b"
+        },
+        "collision": {
+          "high_limb": "0x8b8cd30852f4edbd86df233402d4ca99",
+          "low_limb": "0x1fab9e765c7669731c9c120db7946836",
+          "input_sha256": "53a368faa1b7e7bc39a85fdbe888522c3dec6f9dc361f99608c9defaad56dda3"
+        },
+        "binding_commitment": "0x4d4226614ba0e3cf8e3061925ddcc0f4ee8d463a5a",
+        "binding_unchanged": true,
+        "claim_changed": true,
+        "cairo_binding_check_still_passes": true
+      },
+      {
+        "fixture": "bark-native-owner-exit",
+        "family": "amount-plus-one_delay-minus-thirty-one",
+        "changed_field_indexes": [
+          22,
+          23
+        ],
+        "original": {
+          "amount_sats": "10000",
+          "exit_delay": "2016",
+          "input_sha256": "565c91be50cde7cb99c08acb9c1120ec99b3a68bd1277a723fc56663abfda273"
+        },
+        "collision": {
+          "amount_sats": "10001",
+          "exit_delay": "1985",
+          "input_sha256": "7b8494c262ed23a93ada5ca8eea81d81b992d0742fc737c42e623c108290f334"
+        },
+        "binding_commitment": "0x2fbef1d3496f428d84f5031c8619cd7c8136d3c",
+        "binding_unchanged": true,
+        "claim_changed": true,
+        "cairo_binding_check_still_passes": true
+      },
+      {
+        "fixture": "bark-native-owner-exit",
+        "family": "settlement-high-plus-seventeen_low-minus-thirty-one",
+        "changed_field_indexes": [
+          20,
+          21
+        ],
+        "original": {
+          "high_limb": "0x8b8cd30852f4edbd86df233402d4ca88",
+          "low_limb": "0x1fab9e765c7669731c9c120db7946855",
+          "input_sha256": "565c91be50cde7cb99c08acb9c1120ec99b3a68bd1277a723fc56663abfda273"
+        },
+        "collision": {
+          "high_limb": "0x8b8cd30852f4edbd86df233402d4ca99",
+          "low_limb": "0x1fab9e765c7669731c9c120db7946836",
+          "input_sha256": "f515d7e48d15da80230055c9fe93725560f4b9cd024ae6866b02d54ec22ada60"
+        },
+        "binding_commitment": "0x2fbef1d3496f428d84f5031c8619cd7c8136d3c",
+        "binding_unchanged": true,
+        "claim_changed": true,
+        "cairo_binding_check_still_passes": true
+      }
+    ]
+  }
+}

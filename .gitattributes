@@ -1,0 +1,12 @@
+fixtures/*.json text eol=lf
+evidence/**/*.json text eol=lf
+cairo/** text eol=lf
+cairo-shinigami/** text eol=lf
+*.rs text eol=lf
+*.toml text eol=lf
+*.lock text eol=lf
+*.gitignore text eol=lf
+*.js text eol=lf
+*.ps1 text eol=crlf
+*.patch text eol=lf
+*.md text eol=lf

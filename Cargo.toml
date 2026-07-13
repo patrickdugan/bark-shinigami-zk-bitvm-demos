@@ -1,0 +1,27 @@
+[package]
+name = "bark-bitvm-showcase"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+resolver = "2"
+
+[dependencies]
+ark = { package = "ark-lib", git = "https://github.com/patrickdugan/bark.git", rev = "0ff3636b459c6b0687e9e09eb3024b09975e0b19", features = ["test-util"] }
+bark-shinigami = { git = "https://github.com/patrickdugan/bark.git", rev = "0ff3636b459c6b0687e9e09eb3024b09975e0b19" }
+getrandom = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[[bin]]
+name = "owner_exit_allow"
+path = "src/bin/owner_exit_allow.rs"
+
+[[bin]]
+name = "owner_exit_challenge"
+path = "src/bin/owner_exit_challenge.rs"
+
+[[bin]]
+name = "virtual_cet_guard"
+path = "src/bin/virtual_cet_guard.rs"

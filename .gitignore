@@ -1,0 +1,14 @@
+/target/
+/proofs/
+/receipts/
+/artifacts/
+/cairo-shinigami/target/
+/.env
+/.env.*
+*.key
+*.pem
+*.proof.json
+*.receipt
+*.seal
+*.wallet
+run-output/

@@ -1,0 +1,35 @@
+{
+    "schema":  "bark-bitvm-red-blue-run-v1",
+    "verdict":  "dishonest operator reproduced, then blocked by pinned independent cosigner policy",
+    "utxorefCommit":  "13f43d7f7bbddf10fa507770645ef05e49189441",
+    "red":  {
+                "graphChecks":  1,
+                "falseAllOnesGraphHash":  "f26ff80f5405debdc19e2d765c5fc2ad1a38e1ab99c4ca9216398b59998cbdfa",
+                "collisionVectors":  4
+            },
+    "blue":  {
+                 "totalRows":  12,
+                 "honestControls":  1,
+                 "attackRows":  11,
+                 "caughtAttacks":  11,
+                 "passedRows":  12
+             },
+    "securityBoundary":  "trusted cosigner test double; not trustless ZK enforcement",
+    "sourceProvenance":  {
+                             "redScriptSha256":  "2fd198ae769276e6156070294b27638922c071110a96c35c0134d23b5fcfd6e4",
+                             "blueScriptSha256":  "06a14453d15a077094522ae348b0baa2ad7ff384d27bc30727bae0d3ed1112fd",
+                             "auditScriptSha256":  "b19763df600f657dc8ef94d28377800ce547f8e7937b61b6adeae563ce848c39",
+                             "runnerSha256":  "666613dd2aa160e910d13711c52c2a78e050dd60b72f2f8c05a0d8e12d683cc9",
+                             "nodeVersion":  "v20.20.0",
+                             "gitVersion":  "git version 2.45.2.windows.1",
+                             "powershellVersion":  "5.1.26100.8655"
+                         },
+    "artifacts":  {
+                      "redTeam":  "red-team.json",
+                      "blueTeam":  "blue-team.json",
+                      "blueAudit":  "blue-evidence-audit.json",
+                      "redTeamSha256":  "21fe5454af3c73ec5ce0dc60095f1e4d4f77d63b3d7be35c096c088c05d60acd",
+                      "blueTeamSha256":  "3bdc86f54f1b67441cdf4874708373510deb60add5c997680031081ced16e490",
+                      "blueAuditSha256":  "860b9b4ffa59e4521166fcf1261434a738a9af10e140e369cff0b92e9a39b5ca"
+                  }
+}

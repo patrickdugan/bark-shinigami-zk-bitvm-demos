@@ -1,0 +1,13 @@
+[package]
+name = "ark_vtxo_prover"
+version = "0.1.0"
+edition = "2024_07"
+
+[dependencies]
+cairo_execute = "2.18.0"
+
+[cairo]
+sierra-replace-ids = true
+enable-gas = false
+
+[[target.executable]]

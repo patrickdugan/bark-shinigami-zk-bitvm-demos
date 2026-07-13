@@ -1,0 +1,16 @@
+{
+  "schema": "bark-bitvm-blue-evidence-independent-audit-v1",
+  "utxorefSourceClosureVerified": true,
+  "policyHashVerified": true,
+  "artifactBytesRehashed": true,
+  "artifactBundleDigestVerified": true,
+  "attestationSignatureVerified": true,
+  "attestationContextVerified": true,
+  "attestationDigestVerified": true,
+  "allTrueFactsVerified": true,
+  "attestationStateCrossLinkVerified": true,
+  "stateSignerKeyVerified": true,
+  "utxorefGraphVerified": true,
+  "fraudCount": 0,
+  "graphHash": "48a78e8e588c469652f95204a79dc87a40453df9df7abbf8eda6b3f06658cf8d"
+}

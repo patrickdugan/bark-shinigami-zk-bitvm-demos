@@ -1,0 +1,30 @@
+diff --git a/stwo_cairo_prover/crates/adapter/src/adapter.rs b/stwo_cairo_prover/crates/adapter/src/adapter.rs
+index ee3ef28..68e5a4d 100644
+--- a/stwo_cairo_prover/crates/adapter/src/adapter.rs
++++ b/stwo_cairo_prover/crates/adapter/src/adapter.rs
+@@ -1,0 +2 @@ use anyhow::Result;
++use cairo_vm::types::builtin_name::BuiltinName;
+@@ -44,2 +45,21 @@ pub fn adapt(runner: &CairoRunner) -> Result<ProverInput> {
+-    // TODO(Ohad): take this from the input.
+-    let public_segment_context = PublicSegmentContext::bootloader_context();
++    let vm_builtins = [
++        (builtin_segments.output.is_some(), BuiltinName::output),
++        (builtin_segments.pedersen_builtin.is_some(), BuiltinName::pedersen),
++        (
++            builtin_segments.range_check_builtin.is_some(),
++            BuiltinName::range_check,
++        ),
++        (builtin_segments.bitwise_builtin.is_some(), BuiltinName::bitwise),
++        (builtin_segments.ec_op_builtin.is_some(), BuiltinName::ec_op),
++        (builtin_segments.poseidon_builtin.is_some(), BuiltinName::poseidon),
++        (
++            builtin_segments.range_check96_builtin.is_some(),
++            BuiltinName::range_check96,
++        ),
++        (builtin_segments.add_mod_builtin.is_some(), BuiltinName::add_mod),
++        (builtin_segments.mul_mod_builtin.is_some(), BuiltinName::mul_mod),
++    ]
++    .into_iter()
++    .filter_map(|(present, builtin)| present.then_some(builtin))
++    .collect::<Vec<_>>();
++    let public_segment_context = PublicSegmentContext::new(&vm_builtins);
