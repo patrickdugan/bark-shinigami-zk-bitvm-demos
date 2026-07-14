@@ -163,7 +163,9 @@ jobs:
             --edges normal > "${RUNNER_TEMP}/rv32-tree.txt"
           grep -F 'enum-ordinalize v4.3.2' "${RUNNER_TEMP}/rv32-tree.txt"
           grep -F 'enum-ordinalize-derive v4.3.2' "${RUNNER_TEMP}/rv32-tree.txt"
-          ! grep -E '(^| )(sonic-rs|clap|serde_json|rayon|dashmap|tracing|tracing-subscriber) v' "${RUNNER_TEMP}/rv32-tree.txt"
+          # RISC Zero itself uses tracing in the zkVM/Groth16 stack. Reject the
+          # verifier-unneeded STWO cache and Cairo host utilities specifically.
+          ! grep -E '(^| )(sonic-rs|clap|serde_json|rayon|dashmap) v' "${RUNNER_TEMP}/rv32-tree.txt"
 
       - name: Build the real STWO verifier call into an RV32 ELF
         shell: bash
