@@ -30,7 +30,7 @@ jobs:
       STWO_CAIRO_COMMIT: b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1
       STWO_COMMIT: 93dd93e04f42edba48d8984858c8c39ce9f30c8c
       STWO_CAIRO_PATCH_SHA256: 106255ba721391977be95efe9bafdd257db81f0fe550f1a35c88d07632d5b6e1
-      STWO_PATCH_SHA256: 6a2c96f2d9616173d4c0fe58234f7750b1092b981d4305269d64137b36eb8458
+      STWO_PATCH_SHA256: d0f0e7a9ca5df0b92ffe0f1b2c0c40e25f6fc2a39f2dc372eae893a39fd4f12e
       # rzup takes the Rust version; its backing GitHub release is r0.1.88.0.
       RISC0_RUST_VERSION: 1.88.0
 

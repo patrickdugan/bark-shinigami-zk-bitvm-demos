@@ -61,7 +61,7 @@ index 621fc742..4b265acf 100644
  [dev-dependencies]
  aligned = "0.4.2"
 diff --git a/crates/stwo/src/core/verifier.rs b/crates/stwo/src/core/verifier.rs
-index 98209579..bf74d312 100644
+index 98209579..db72eb23 100644
 --- a/crates/stwo/src/core/verifier.rs
 +++ b/crates/stwo/src/core/verifier.rs
 @@ -49,6 +49,7 @@ pub fn verify_ex<MC: MerkleChannel>(
@@ -72,13 +72,25 @@ index 98209579..bf74d312 100644
      tracing::info!(
          "Split composition polynomial log degree bound: {}",
          split_composition_log_degree_bound
-@@ -96,7 +97,9 @@ pub fn verify_ex<MC: MerkleChannel>(
+@@ -95,12 +96,15 @@ pub fn verify_ex<MC: MerkleChannel>(
+     // Add the composition polynomial mask points.
      sample_points.push(vec![vec![oods_point]; 2 * SECURE_EXTENSION_DEGREE]);
  
-     let sample_points_by_column = sample_points.as_cols_ref().flatten();
+-    let sample_points_by_column = sample_points.as_cols_ref().flatten();
+-    tracing::info!("Sampling {} columns.", sample_points_by_column.len());
+-    tracing::info!(
+-        "Total sample points: {}.",
+-        sample_points_by_column.into_iter().flatten().count()
+-    );
 +    #[cfg(feature = "tracing")]
-     tracing::info!("Sampling {} columns.", sample_points_by_column.len());
-+    #[cfg(feature = "tracing")]
-     tracing::info!(
-         "Total sample points: {}.",
-         sample_points_by_column.into_iter().flatten().count()
++    {
++        let sample_points_by_column = sample_points.as_cols_ref().flatten();
++        tracing::info!("Sampling {} columns.", sample_points_by_column.len());
++        tracing::info!(
++            "Total sample points: {}.",
++            sample_points_by_column.into_iter().flatten().count()
++        );
++    }
+ 
+     let composition_oods_eval = proof
+         .extract_composition_oods_eval(oods_point, max_log_degree_bound)
