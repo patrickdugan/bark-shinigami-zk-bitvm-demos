@@ -17,4 +17,6 @@ anyhow = "=1.0.103"
 # checked-in lock and CI gate also match every RISC Zero crate in v3.0.4's
 # official workspace lock; later semver-compatible circuit crates changed ABI.
 risc0-build = "=3.0.4"
+risc0-binfmt = "=3.0.3"
+risc0-zkos-v1compat = "=2.2.1"
 risc0-zkvm = { version = "=3.0.4", default-features = false, features = ["client"] }

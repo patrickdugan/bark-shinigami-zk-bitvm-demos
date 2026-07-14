@@ -3,6 +3,8 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{ensure, Context, Result};
+use risc0_binfmt::ProgramBinary;
+use risc0_zkos_v1compat::V1COMPAT_ELF;
 use risc0_zkvm::{compute_image_id, default_executor, ExecutorEnv, ExitCode};
 
 const EVIDENCE_LEN: usize = 184;
@@ -32,8 +34,13 @@ fn main() -> Result<()> {
 
     let elf = fs::read(&elf_path).with_context(|| format!("read ELF {:?}", elf_path))?;
     let proof = fs::read(&proof_path).with_context(|| format!("read proof {:?}", proof_path))?;
+    let program = ProgramBinary::new(&elf, V1COMPAT_ELF).encode();
+    if let Some(output_path) = env::var_os("RISC0_PROGRAM_BINARY_OUT") {
+        fs::write(&output_path, &program)
+            .with_context(|| format!("write encoded program binary {:?}", output_path))?;
+    }
     let env = ExecutorEnv::builder().write(&proof)?.build()?;
-    let session = default_executor().execute(env, &elf)?;
+    let session = default_executor().execute(env, &program)?;
     ensure!(
         session.exit_code == ExitCode::Halted(0),
         "guest did not halt cleanly"
@@ -84,7 +91,7 @@ fn main() -> Result<()> {
         "denial evidence aliased the authorization journal"
     );
 
-    let image_id = compute_image_id(&elf)?;
+    let image_id = compute_image_id(&program)?;
     let case = Path::new(&proof_path)
         .file_name()
         .and_then(|name| name.to_str())

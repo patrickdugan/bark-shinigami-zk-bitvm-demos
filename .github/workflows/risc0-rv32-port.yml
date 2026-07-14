@@ -296,6 +296,7 @@ jobs:
           mkdir -p "${output}"
 
           set +e
+          RISC0_PROGRAM_BINARY_OUT="${output}/bark-stwo-guest.program.bin" \
           RISC0_EXECUTOR=local "${executor}" \
             "${elf}" \
             proof-evidence/owner_exit_allow.stwo.bin \
@@ -337,9 +338,10 @@ jobs:
 
           sha256sum \
             "${elf}" \
+            "${output}/bark-stwo-guest.program.bin" \
             "${output}"/*.execution.json \
             > "${output}/SHA256SUMS"
-          cp "${elf}" "${output}/bark-stwo-guest.elf"
+          cp "${elf}" "${output}/bark-stwo-guest.user.elf"
           {
             echo '## Verified zkVM denial evidence'
             echo '```json'

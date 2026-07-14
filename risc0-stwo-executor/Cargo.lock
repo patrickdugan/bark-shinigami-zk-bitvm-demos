@@ -338,7 +338,9 @@ name = "bark-risc0-stwo-executor"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "risc0-binfmt",
  "risc0-build",
+ "risc0-zkos-v1compat",
  "risc0-zkvm",
 ]
 
