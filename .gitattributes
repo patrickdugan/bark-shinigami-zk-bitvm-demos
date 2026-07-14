@@ -2,6 +2,7 @@ fixtures/*.json text eol=lf
 evidence/**/*.json text eol=lf
 cairo/** text eol=lf
 cairo-shinigami/** text eol=lf
+proof-inputs/*.json text eol=lf
 *.rs text eol=lf
 *.toml text eol=lf
 *.lock text eol=lf

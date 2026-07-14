@@ -1,4 +1,4 @@
-name: Prove STWO owner relation
+name: Prove STWO showcase relations
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ on:
     paths:
       - .github/workflows/prove-stwo-owner.yml
       - cairo-shinigami/**
-      - proof-inputs/owner_exit_allow.arguments.json
+      - proof-inputs/**
       - stwo-cairo-public-segments.patch
 
 permissions:
@@ -26,7 +26,9 @@ jobs:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
       STWO_CAIRO_COMMIT: b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1
-      EXPECTED_ARGUMENTS_SHA256: d7d629bfadbd990307930c0c9aade202a746696503cd488f616d75a82779dd8b
+      EXPECTED_OWNER_ARGUMENTS_SHA256: d7d629bfadbd990307930c0c9aade202a746696503cd488f616d75a82779dd8b
+      EXPECTED_CHALLENGE_ARGUMENTS_SHA256: dc1e58f1473925abcd4409dacb2019f3c2b2db16d28e00fa8cdee5dd118da691
+      EXPECTED_CET_ARGUMENTS_SHA256: 58cdc15ebe5725b3a0b694cde16a83356c1c8ca16c741ca9d80ec7aff2bc807f
       EXPECTED_EXECUTABLE_SHA256: 5b1e4c7c4a545b5ee34c06d672cfa1d4e3e38b732951c60a65a5dcdaba4b5c22
       EXPECTED_PATCH_SHA256: ed5027b67ee3798ef2f1467604816cc5efb8e44cedf6083d329ae8f8e4227a71
 
@@ -75,7 +77,9 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          echo "${EXPECTED_ARGUMENTS_SHA256}  proof-inputs/owner_exit_allow.arguments.json" | sha256sum --check
+          echo "${EXPECTED_OWNER_ARGUMENTS_SHA256}  proof-inputs/owner_exit_allow.arguments.json" | sha256sum --check
+          echo "${EXPECTED_CHALLENGE_ARGUMENTS_SHA256}  proof-inputs/owner_exit_challenge.arguments.json" | sha256sum --check
+          echo "${EXPECTED_CET_ARGUMENTS_SHA256}  proof-inputs/virtual_cet_guard.arguments.json" | sha256sum --check
           echo "${EXPECTED_PATCH_SHA256}  stwo-cairo-public-segments.patch" | sha256sum --check
 
       - name: Build patched STWO Cairo prover
@@ -107,31 +111,58 @@ jobs:
             df -h
           } | tee -a proofs/runner-resources.txt
 
-      - name: Generate and internally verify the STWO proof
+      - name: Prove valid relations and reject the dishonest relation
         shell: bash
         run: |
           set -uxo pipefail
           mkdir -p proofs
-          set +e
-          /usr/bin/time -v -o proofs/owner_exit_allow.metrics.txt \
+          if /usr/bin/time -v -o proofs/owner_exit_challenge.metrics.txt \
             stwo-cairo/stwo_cairo_prover/target/release/run_and_prove \
               --program cairo-shinigami/target/dev/bark_shinigami_relation.executable.json \
               --program_type executable \
-              --program_arguments_file proof-inputs/owner_exit_allow.arguments.json \
-              --proof_path proofs/owner_exit_allow.stwo.bin \
+              --program_arguments_file proof-inputs/owner_exit_challenge.arguments.json \
+              --proof_path proofs/owner_exit_challenge.stwo.bin \
               --proof-format binary \
-              --verify
-          proof_status=$?
-          set -e
-          if [ -f proofs/owner_exit_allow.stwo.bin ]; then
+              --verify \
+              > proofs/owner_exit_challenge.log 2>&1; then
+            echo "dishonest owner-exit challenge unexpectedly produced a valid proof" >&2
+            exit 1
+          fi
+          if [ -s proofs/owner_exit_challenge.stwo.bin ]; then
+            echo "dishonest owner-exit challenge left a nonempty proof" >&2
+            exit 1
+          fi
+
+          proof_status=0
+          for case_name in owner_exit_allow virtual_cet_guard; do
+            set +e
+            /usr/bin/time -v -o "proofs/${case_name}.metrics.txt" \
+              stwo-cairo/stwo_cairo_prover/target/release/run_and_prove \
+                --program cairo-shinigami/target/dev/bark_shinigami_relation.executable.json \
+                --program_type executable \
+                --program_arguments_file "proof-inputs/${case_name}.arguments.json" \
+                --proof_path "proofs/${case_name}.stwo.bin" \
+                --proof-format binary \
+                --verify
+            case_status=$?
+            set -e
+            if [ "${case_status}" -ne 0 ]; then
+              proof_status="${case_status}"
+              break
+            fi
+          done
+          if [ "${proof_status}" -eq 0 ]; then
             sha256sum \
               cairo-shinigami/target/dev/bark_shinigami_relation.executable.json \
               proof-inputs/owner_exit_allow.arguments.json \
+              proof-inputs/owner_exit_challenge.arguments.json \
+              proof-inputs/virtual_cet_guard.arguments.json \
               proofs/owner_exit_allow.stwo.bin \
+              proofs/virtual_cet_guard.stwo.bin \
               stwo-cairo-public-segments.patch \
               | tee proofs/SHA256SUMS
           fi
-          cat proofs/owner_exit_allow.metrics.txt || true
+          cat proofs/*.metrics.txt || true
           exit "${proof_status}"
 
       - name: Upload verified proof and measurements
