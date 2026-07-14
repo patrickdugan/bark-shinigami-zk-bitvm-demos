@@ -9,6 +9,7 @@ on:
       - .github/workflows/risc0-rv32-port.yml
       - RISC0_RV32_PORT_AUDIT.md
       - stwo-cairo-risc0-verifier-only.patch
+      - stwo-risc0-verifier-only.patch
       - risc0-stwo-verifier/**
       - risc0-stwo-executor/**
 
@@ -27,6 +28,9 @@ jobs:
       CARGO_INCREMENTAL: 0
       CARGO_NET_GIT_FETCH_WITH_CLI: true
       STWO_CAIRO_COMMIT: b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1
+      STWO_COMMIT: 93dd93e04f42edba48d8984858c8c39ce9f30c8c
+      STWO_CAIRO_PATCH_SHA256: 106255ba721391977be95efe9bafdd257db81f0fe550f1a35c88d07632d5b6e1
+      STWO_PATCH_SHA256: 6a2c96f2d9616173d4c0fe58234f7750b1092b981d4305269d64137b36eb8458
       # rzup takes the Rust version; its backing GitHub release is r0.1.88.0.
       RISC0_RUST_VERSION: 1.88.0
 
@@ -44,10 +48,13 @@ jobs:
           rustc +risc0 --version | tee /tmp/risc0-rust-version.txt
           grep -F 'rustc 1.88.0' /tmp/risc0-rust-version.txt
 
-      - name: Apply only the verifier packaging patch
+      - name: Apply only the verifier packaging patches
         shell: bash
         run: |
           set -euxo pipefail
+          echo "${STWO_CAIRO_PATCH_SHA256}  stwo-cairo-risc0-verifier-only.patch" | sha256sum --check
+          echo "${STWO_PATCH_SHA256}  stwo-risc0-verifier-only.patch" | sha256sum --check
+
           git clone --filter=blob:none https://github.com/starkware-libs/stwo-cairo.git "${RUNNER_TEMP}/stwo-cairo"
           git -C "${RUNNER_TEMP}/stwo-cairo" checkout --detach "${STWO_CAIRO_COMMIT}"
           git -C "${RUNNER_TEMP}/stwo-cairo" apply --check "${GITHUB_WORKSPACE}/stwo-cairo-risc0-verifier-only.patch"
@@ -60,6 +67,18 @@ jobs:
           grep -F '.filter(|(_, &uses)| uses >= PRIME.into())' \
             "${RUNNER_TEMP}/stwo-cairo/stwo_cairo_prover/crates/cairo-air/src/verifier.rs"
 
+          git clone --filter=blob:none https://github.com/starkware-libs/stwo.git "${RUNNER_TEMP}/stwo"
+          git -C "${RUNNER_TEMP}/stwo" checkout --detach "${STWO_COMMIT}"
+          git -C "${RUNNER_TEMP}/stwo" apply --check "${GITHUB_WORKSPACE}/stwo-risc0-verifier-only.patch"
+          git -C "${RUNNER_TEMP}/stwo" apply "${GITHUB_WORKSPACE}/stwo-risc0-verifier-only.patch"
+          git -C "${RUNNER_TEMP}/stwo" diff --check
+
+          actual="$(git -C "${RUNNER_TEMP}/stwo" diff --name-only)"
+          expected=$'crates/constraint-framework/Cargo.toml\ncrates/stwo/Cargo.toml\ncrates/stwo/src/core/verifier.rs'
+          test "${actual}" = "${expected}"
+          grep -F 'pub fn verify_ex<MC: MerkleChannel>' \
+            "${RUNNER_TEMP}/stwo/crates/stwo/src/core/verifier.rs"
+
       - name: Prepare an isolated full-guest compile probe
         shell: bash
         run: |
@@ -69,6 +88,8 @@ jobs:
           export PORT_LIB="${RUNNER_TEMP}/risc0-stwo-verifier-port/src/lib.rs"
           export CAIRO_AIR="${RUNNER_TEMP}/stwo-cairo/stwo_cairo_prover/crates/cairo-air"
           export CAIRO_COMMON="${RUNNER_TEMP}/stwo-cairo/stwo_cairo_prover/crates/common"
+          export STWO_ROOT="${RUNNER_TEMP}/stwo"
+          export STWO_CAIRO_MANIFEST="${RUNNER_TEMP}/stwo-cairo/stwo_cairo_prover/Cargo.toml"
 
           python3 - <<'PY'
           import os
@@ -80,9 +101,29 @@ jobs:
           new_air = f'cairo-air = {{ path = "{os.environ["CAIRO_AIR"]}", default-features = false, features = ["verifier"], optional = true }}'
           old_common = 'stwo-cairo-common = { git = "https://github.com/starkware-libs/stwo-cairo.git", rev = "b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1", default-features = false, optional = true }'
           new_common = f'stwo-cairo-common = {{ path = "{os.environ["CAIRO_COMMON"]}", default-features = false, optional = true }}'
+          old_stwo = 'stwo = { git = "https://github.com/starkware-libs/stwo.git", rev = "93dd93e0", optional = true }'
+          new_stwo = f'stwo = {{ path = "{os.environ["STWO_ROOT"]}/crates/stwo", optional = true }}'
           assert manifest.count(old_air) == 1
           assert manifest.count(old_common) == 1
-          manifest_path.write_text(manifest.replace(old_air, new_air).replace(old_common, new_common))
+          assert manifest.count(old_stwo) == 1
+          manifest_path.write_text(
+              manifest.replace(old_air, new_air)
+              .replace(old_common, new_common)
+              .replace(old_stwo, new_stwo)
+          )
+
+          stwo_cairo_manifest_path = Path(os.environ["STWO_CAIRO_MANIFEST"])
+          stwo_cairo_manifest = stwo_cairo_manifest_path.read_text()
+          old_stwo_workspace = 'stwo = { git = "https://github.com/starkware-libs/stwo", rev = "93dd93e0" }'
+          new_stwo_workspace = f'stwo = {{ path = "{os.environ["STWO_ROOT"]}/crates/stwo" }}'
+          old_framework_workspace = 'stwo-constraint-framework = { git = "https://github.com/starkware-libs/stwo", rev = "93dd93e0" }'
+          new_framework_workspace = f'stwo-constraint-framework = {{ path = "{os.environ["STWO_ROOT"]}/crates/constraint-framework" }}'
+          assert stwo_cairo_manifest.count(old_stwo_workspace) == 1
+          assert stwo_cairo_manifest.count(old_framework_workspace) == 1
+          stwo_cairo_manifest_path.write_text(
+              stwo_cairo_manifest.replace(old_stwo_workspace, new_stwo_workspace)
+              .replace(old_framework_workspace, new_framework_workspace)
+          )
 
           lib_path = Path(os.environ["PORT_LIB"])
           lib = lib_path.read_text()
@@ -122,7 +163,7 @@ jobs:
             --edges normal > "${RUNNER_TEMP}/rv32-tree.txt"
           grep -F 'enum-ordinalize v4.3.2' "${RUNNER_TEMP}/rv32-tree.txt"
           grep -F 'enum-ordinalize-derive v4.3.2' "${RUNNER_TEMP}/rv32-tree.txt"
-          ! grep -E '(^| )sonic-rs v|(^| )clap v|(^| )serde_json v|(^| )rayon v' "${RUNNER_TEMP}/rv32-tree.txt"
+          ! grep -E '(^| )(sonic-rs|clap|serde_json|rayon|dashmap|tracing|tracing-subscriber) v' "${RUNNER_TEMP}/rv32-tree.txt"
 
       - name: Build the real STWO verifier call into an RV32 ELF
         shell: bash

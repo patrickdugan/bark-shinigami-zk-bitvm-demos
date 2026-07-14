@@ -11,7 +11,7 @@ index 1aef62d..cf28d14 100644
   "serde_json",
   "sonic-rs",
 diff --git a/stwo_cairo_prover/crates/cairo-air/Cargo.toml b/stwo_cairo_prover/crates/cairo-air/Cargo.toml
-index a3ac596..dac1bc8 100644
+index a3ac596..07f79f7 100644
 --- a/stwo_cairo_prover/crates/cairo-air/Cargo.toml
 +++ b/stwo_cairo_prover/crates/cairo-air/Cargo.toml
 @@ -7,19 +7,21 @@ repository.workspace = true
@@ -19,7 +19,7 @@ index a3ac596..dac1bc8 100644
  
  [features]
 +default = ["host-utils"]
-+host-utils = ["dep:bincode", "dep:bzip2", "dep:clap", "dep:serde_json", "dep:sonic-rs"]
++host-utils = ["dep:bincode", "dep:bzip2", "dep:clap", "dep:log", "dep:serde_json", "dep:sonic-rs", "dep:tracing"]
 +verifier = []
  slow-tests = []
  
@@ -30,8 +30,9 @@ index a3ac596..dac1bc8 100644
 +bzip2 = { workspace = true, optional = true }
  itertools.workspace = true
 -clap.workspace = true
+-log.workspace = true
 +clap = { workspace = true, optional = true }
- log.workspace = true
++log = { workspace = true, optional = true }
  num-traits.workspace = true
  paste.workspace = true
  # TODO(Ohad): Add parallel config.
@@ -45,8 +46,9 @@ index a3ac596..dac1bc8 100644
  stwo-constraint-framework.workspace = true
  thiserror.workspace = true
 -serde_json.workspace = true
+-tracing.workspace = true
 +serde_json = { workspace = true, optional = true }
- tracing.workspace = true
++tracing = { workspace = true, optional = true }
  
  [target.'cfg(not(any(target_arch = "wasm32", target_arch = "wasm64")))'.dependencies]
 -sonic-rs.workspace = true
@@ -144,7 +146,7 @@ index db2fb96..2db1cde 100644
      proof_path: &Path,
      proof_format: ProofFormat,
 diff --git a/stwo_cairo_prover/crates/cairo-air/src/verifier.rs b/stwo_cairo_prover/crates/cairo-air/src/verifier.rs
-index 805f00e..36e7a6e 100644
+index 805f00e..bae7b03 100644
 --- a/stwo_cairo_prover/crates/cairo-air/src/verifier.rs
 +++ b/stwo_cairo_prover/crates/cairo-air/src/verifier.rs
 @@ -2,6 +2,7 @@ use std::collections::HashMap;
@@ -155,7 +157,15 @@ index 805f00e..36e7a6e 100644
  use serde_json::to_string_pretty;
  use stwo::core::channel::{Channel, MerkleChannel};
  use stwo::core::fields::m31::BaseField;
-@@ -95,8 +96,12 @@ fn verify_claim(claim: &CairoClaim) {
+@@ -13,6 +14,7 @@ use stwo_cairo_common::memory::{LARGE_MEMORY_VALUE_ID_BASE, LOG_MEMORY_ADDRESS_B
+ use stwo_cairo_common::prover_types::cpu::{CasmState, PRIME};
+ use stwo_constraint_framework::PREPROCESSED_TRACE_IDX;
+ use thiserror::Error;
++#[cfg(feature = "host-utils")]
+ use tracing::{span, Level};
+ 
+ use crate::air::{MemorySection, PublicData, PublicMemory, PublicSegmentRanges, SegmentRange};
+@@ -95,21 +97,33 @@ fn verify_claim(claim: &CairoClaim) {
  }
  
  fn check_relation_uses(relation_uses: &HashMap<&'static str, u64>) {
@@ -163,12 +173,10 @@ index 805f00e..36e7a6e 100644
      let all_relation_uses_pretty = to_string_pretty(&relation_uses).unwrap();
 +    #[cfg(feature = "host-utils")]
      log::info!("All relation uses:\n{all_relation_uses_pretty}");
-+    #[cfg(not(feature = "host-utils"))]
-+    log::info!("Checked {} relation-use bounds", relation_uses.len());
- 
+-
      let outstanding_relations = relation_uses
          .iter()
-@@ -104,12 +109,23 @@ fn check_relation_uses(relation_uses: &HashMap<&'static str, u64>) {
+         .filter(|(_, &uses)| uses >= PRIME.into())
          .collect::<Vec<_>>();
  
      if !outstanding_relations.is_empty() {
@@ -198,6 +206,14 @@ index 805f00e..36e7a6e 100644
      }
  }
  
+@@ -325,6 +339,7 @@ pub fn verify_cairo_ex<MC: MerkleChannel>(
+     }: CairoProofForRustVerifier<MC::H>,
+     include_all_preprocessed_columns: bool,
+ ) -> Result<(), CairoVerificationError> {
++    #[cfg(feature = "host-utils")]
+     let _span = span!(Level::INFO, "verify_cairo").entered();
+ 
+     // Auxiliary verifications.
 diff --git a/stwo_cairo_prover/crates/common/Cargo.toml b/stwo_cairo_prover/crates/common/Cargo.toml
 index 4b2afa7..a7f4efd 100644
 --- a/stwo_cairo_prover/crates/common/Cargo.toml
@@ -346,10 +362,3 @@ index af1dc8d..b648bc3 100644
  fn rows_to_columns(rows: &[SimpleAffinePoint]) -> [Vec<BaseField>; PEDERSEN_TABLE_N_COLUMNS] {
      // Process each column in parallel.
      let columns_vec: Vec<Vec<BaseField>> = (0..PEDERSEN_TABLE_N_COLUMNS)
-warning: in the working copy of 'stwo_cairo_prover/Cargo.lock', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'stwo_cairo_prover/crates/cairo-air/Cargo.toml', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'stwo_cairo_prover/crates/cairo-air/src/utils.rs', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'stwo_cairo_prover/crates/cairo-air/src/verifier.rs', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'stwo_cairo_prover/crates/common/Cargo.toml', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'stwo_cairo_prover/crates/common/src/preprocessed_columns/mod.rs', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'stwo_cairo_prover/crates/common/src/preprocessed_columns/pedersen.rs', LF will be replaced by CRLF the next time Git touches it
