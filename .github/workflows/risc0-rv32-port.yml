@@ -94,6 +94,15 @@ jobs:
           lib_path.write_text(lib.replace(guard, ""))
           PY
 
+          cargo +risc0 update \
+            --manifest-path "${PORT_MANIFEST}" \
+            --package enum-ordinalize \
+            --precise 4.3.2
+          cargo +risc0 update \
+            --manifest-path "${PORT_MANIFEST}" \
+            --package enum-ordinalize-derive \
+            --precise 4.3.2
+
       - name: Reject host-only verifier dependencies
         shell: bash
         run: |
@@ -103,6 +112,8 @@ jobs:
             --features risc0-guest \
             --target riscv32im-risc0-zkvm-elf \
             --edges normal > "${RUNNER_TEMP}/rv32-tree.txt"
+          grep -F 'enum-ordinalize v4.3.2' "${RUNNER_TEMP}/rv32-tree.txt"
+          grep -F 'enum-ordinalize-derive v4.3.2' "${RUNNER_TEMP}/rv32-tree.txt"
           ! grep -E '(^| )sonic-rs v|(^| )clap v|(^| )serde_json v|(^| )rayon v' "${RUNNER_TEMP}/rv32-tree.txt"
 
       - name: Compile the real STWO verifier call into the RV32 guest
@@ -111,6 +122,7 @@ jobs:
           set -uxo pipefail
           set +e
           cargo +risc0 check \
+            --locked \
             --manifest-path "${RUNNER_TEMP}/risc0-stwo-verifier-port/Cargo.toml" \
             --features risc0-guest \
             --target riscv32im-risc0-zkvm-elf \

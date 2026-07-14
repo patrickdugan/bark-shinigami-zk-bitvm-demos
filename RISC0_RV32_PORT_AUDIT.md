@@ -164,7 +164,8 @@ rustflags = ['--cfg', 'getrandom_backend="custom"']
 The dedicated `RISC Zero RV32 verifier port` GitHub workflow applies the patch
 to a clean pinned checkout, asserts its exact file scope and unchanged
 relation-use predicate, rejects host-only dependencies from the RV32 graph,
-and compiles the full guest around the real `verify_cairo` call. The local
-RV32 dependency compile was intentionally stopped before completion; the next
-exact blocker, if any, belongs in that GitHub log and must not be bypassed with
-a mock verifier.
+pins `enum-ordinalize` 4.3.2 (the latest checked version compatible with the
+SDK's Rust 1.88 toolchain), and compiles the full guest around the real
+`verify_cairo` call. The local RV32 dependency compile was intentionally
+stopped before completion; the next exact blocker, if any, belongs in that
+GitHub log and must not be bypassed with a mock verifier.
