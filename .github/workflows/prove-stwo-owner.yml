@@ -85,7 +85,8 @@ jobs:
           rustup toolchain install nightly-2025-06-23 --profile minimal
           git clone --filter=blob:none https://github.com/starkware-libs/stwo-cairo.git stwo-cairo
           git -C stwo-cairo checkout "${STWO_CAIRO_COMMIT}"
-          git -C stwo-cairo apply "${GITHUB_WORKSPACE}/stwo-cairo-public-segments.patch"
+          git -C stwo-cairo apply --unidiff-zero \
+            "${GITHUB_WORKSPACE}/stwo-cairo-public-segments.patch"
           git -C stwo-cairo diff --check
           cd stwo-cairo/stwo_cairo_prover
           RUSTFLAGS="-C target-cpu=native -C opt-level=3" \
