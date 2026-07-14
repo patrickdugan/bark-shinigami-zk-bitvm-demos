@@ -45,8 +45,8 @@ boolean.
 | Proof format | bzip2-compressed bincode `CairoProofForRustVerifier<Blake2sMerkleHasher>` |
 
 The checked-in target configuration selects RISC Zero's required custom
-`getrandom` backend for `riscv32im-risc0-zkvm-elf`; it has no effect on native
-builds.
+`getrandom` backend and exact 3.0.4 linker layout for
+`riscv32im-risc0-zkvm-elf`; it has no effect on native builds.
 
 ## Commands
 
@@ -75,11 +75,18 @@ compile guard. The repository includes
 `../stwo-cairo-risc0-verifier-only.patch`, which gates host file utilities,
 JSON diagnostics, Rayon and Pedersen table materialization while leaving the
 real verifier and its relation bounds intact. The dedicated GitHub RV32
-workflow applies that patch to the exact upstream commit; its full compile with
-RISC Zero Rust 1.88.0 is green.
+workflow applies that patch to the exact upstream commit; its full compile and
+local execution with RISC Zero Rust 1.88.0 are green.
 
 Both proof artifacts independently reproduce the nonzero program commitment
 `4c75023e...714ef067` and policy commitment `626cd38f...71955314` now pinned in
-the guest. The next workflow gate executes both proofs and measures the ELF.
-A compile success or 184-byte denial journal is not operator authorization; the
-current `1,0,0` relation still cannot emit the 32-byte authorization journal.
+the guest. GitHub run
+[`29364870460`](https://github.com/patrickdugan/bark-shinigami-zk-bitvm-demos/actions/runs/29364870460)
+executed both in the exact pinned local zkVM executor. The measured image ID is
+`62516f3521371587578fa93e3f9d8952bdf396d733c54079ac27f91864720484`;
+the owner-exit and virtual-CET sessions used 2,551,810,043 and 2,580,013,351
+cycles respectively and each emitted the expected 184-byte denial journal.
+
+This is measured execution, not a cryptographic RISC Zero receipt. A compile
+success or 184-byte denial journal is not operator authorization; the current
+`1,0,0` relation still cannot emit the 32-byte authorization journal.

@@ -8,10 +8,11 @@ here. All publication and provenance rules in this showcase are GitHub-only.
 The implementation is fail-closed. It does **not** claim mainnet readiness or
 on-chain ZK enforcement. Real STWO proofs now exist for the two fixed valid
 fixtures, and the dishonest fixture is rejected before proof generation. Those
-inner proofs do not authenticate Bitcoin chain state and are not recursively
-verified by RISC Zero, Boundless, or Bitcoin. A real Boundless receipt and a
-relay-tested BitVM transaction graph do not yet exist, so every demo still
-reports `not_enforced` and never authorizes the operator-take path.
+inner proofs do not authenticate Bitcoin chain state. Both now execute through
+the real verifier inside RISC Zero's local zkVM executor, but no cryptographic
+RISC Zero/Boundless receipt or relay-tested BitVM transaction graph exists.
+Every demo therefore still reports `not_enforced` and never authorizes the
+operator-take path.
 
 ## What is implemented
 
@@ -61,9 +62,9 @@ reports `not_enforced` and never authorizes the operator-take path.
   binds the two image IDs in one operation, and encodes the exact 378-byte
   artifact journal. The native adapter uses the real upstream verifier; the
   reviewable verifier-only `stwo-cairo` patch and dedicated GitHub job now
-  cross-compile the real `verify_cairo` path successfully and proceed to
-  execute both proof artifacts for image/cycle measurements. The reproduced
-  target failures and exact port are in
+  cross-compile and execute the real `verify_cairo` path for both proof
+  artifacts. The measured image ID, cycle counts, reproduced target failures,
+  and exact port are in
   [`RISC0_RV32_PORT_AUDIT.md`](RISC0_RV32_PORT_AUDIT.md).
 - Strict Boundless `Blake3Groth16V0_1` parsing: selector `62f049f6`, 32-byte
   journal, 256-byte raw proof, one canonical BN254 public scalar, and
@@ -131,9 +132,8 @@ Before any positive signet label, the remaining gates are:
 
 1. add authenticated Bitcoin header-chain, confirmation, and UTXO-inclusion
    evidence to the proven relation;
-2. port the Cairo/STWO verifier to a verifier-only RISC Zero RV32IM guest and
-   build it with dev receipts disabled (upstream Cairo verifier dependencies are
-   not guest-compatible as-is);
+2. extend the measured proof-only RISC Zero guest to consume the complete
+   framed Bark binding and generate an independently verified non-dev receipt;
 3. obtain and verify a real Boundless Blake3Groth16 receipt on Sepolia;
 4. build BitVM2 and BitVMX candidates and require every transaction to pass
    Bitcoin Core 31.1 consensus and `testmempoolaccept`;

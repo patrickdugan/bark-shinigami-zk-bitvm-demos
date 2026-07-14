@@ -1,8 +1,8 @@
 # RISC Zero recursion contract for the Shinigami STWO relation
 
 Status: design specification, not an enforcement claim. The real STWO verifier
-now cross-compiles inside the RISC Zero RV32 guest with a reviewable upstream
-patch. Guest execution, receipt generation and the complete framed-input
+now cross-compiles and executes inside the RISC Zero RV32 local executor with a
+reviewable upstream patch. Receipt generation and the complete framed-input
 contract remain pending. No Boundless request or BitVM transaction graph
 satisfying this document exists yet.
 
@@ -333,17 +333,18 @@ data is:
    Final recursive proofs require a nonzero guest image ID and regeneration of
    the Cairo executable, arguments, and STWO proofs under the non-circular build
    order above.
-5. **The RISC Zero crate is not yet a measured guest artifact.**
+5. **The measured RISC Zero guest is not yet the complete recursion artifact.**
    `risc0-stwo-verifier/` now strictly parses the complete framed input and Bark
    envelope, performs a typed image-ID handshake, implements the fixed-width
    journal record, and has a native adapter to the real upstream verifier. The
    guest's real `verify_cairo` call now cross-compiles after the exact verifier-
    only patch, and its program and verifier-policy pins are nonzero. It emits a
    type-distinct 184-byte verification record when the proven relation denies
-   authorization. It does not yet consume the complete framed binding, and
-   there is no measured ELF, image ID, execution receipt, or cycle/memory
-   bound. `RISC0_RV32_PORT_AUDIT.md` records the fixed packaging and runtime
-   blockers.
+   authorization. Run `29364870460` measured its 4,556,392-byte ELF, image ID
+   `62516f3521371587578fa93e3f9d8952bdf396d733c54079ac27f91864720484`,
+   and two successful local sessions of 2,551,810,043 and 2,580,013,351
+   cycles. It does not yet consume the complete framed binding, and local
+   execution is not a cryptographic RISC Zero receipt.
 6. **No Boundless receipt exists for this guest/journal.** There is no request,
    real 260-byte selectable seal, reconstructed claim, or locally verified
    claim digest.

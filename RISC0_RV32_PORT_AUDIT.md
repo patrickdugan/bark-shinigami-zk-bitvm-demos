@@ -1,10 +1,13 @@
 # RISC Zero RV32 verifier-port audit
 
-Status: **real verifier cross-compiles for RV32; zkVM execution pending; fail
+Status: **both real proofs execute in the RISC Zero RV32 local executor; fail
 closed**. GitHub run
-[`29351949727`](https://github.com/patrickdugan/bark-shinigami-zk-bitvm-demos/actions/runs/29351949727)
-compiled the complete guest successfully. This audit removes no verification
-check and introduces no host-supplied acceptance value.
+[`29364870460`](https://github.com/patrickdugan/bark-shinigami-zk-bitvm-demos/actions/runs/29364870460)
+built the complete guest and exact pinned local executor, executed both saved
+STWO proofs, and emitted type-distinct 184-byte denial-evidence journals. It
+did not generate a RISC Zero receipt or contact a remote prover network. This
+audit removes no verification check and introduces no host-supplied acceptance
+value.
 
 ## Reproduced boundary
 
@@ -30,11 +33,15 @@ cargo +risc0 check \
 ```
 
 The target needs the standard RISC Zero custom-randomness selection, even when
-the verifier never asks for randomness:
+the verifier never asks for randomness, and the checked-in RISC Zero 3.0.4
+linker layout places executable text at `0x00200800`:
 
 ```toml
 [target.riscv32im-risc0-zkvm-elf]
-rustflags = ['--cfg', 'getrandom_backend="custom"']
+rustflags = [
+  '--cfg', 'getrandom_backend="custom"',
+  '-C', 'link-arg=-Triscv32im-risc0-zkvm-elf.ld',
+]
 ```
 
 Cargo must be launched from the guest crate (or receive equivalent explicit
@@ -122,7 +129,7 @@ materialization. In `verifier.rs`, it replaces pretty-JSON diagnostics in the
 verifier-only build but leaves the exact `uses >= PRIME` rejection intact. It
 does not modify AIR components, the Fiat-Shamir channel, PCS or FRI logic. Its
 SHA-256 is
-`3624ce654927a66082b36caf47f5a0ac62a51179d92897b89c62d587a615c719`.
+`106255ba721391977be95efe9bafdd257db81f0fe550f1a35c88d07632d5b6e1`.
 
 Apply and validate it from a clean pinned `stwo-cairo` checkout:
 
@@ -162,11 +169,14 @@ cargo +risc0 check \
 ```
 
 For a full `risc0-zkvm 3.0.4` guest rather than the isolated `cairo-air`
-probe, also configure the target's getrandom backend:
+probe, also configure the target's getrandom backend and exact linker layout:
 
 ```toml
 [target.riscv32im-risc0-zkvm-elf]
-rustflags = ['--cfg', 'getrandom_backend="custom"']
+rustflags = [
+  '--cfg', 'getrandom_backend="custom"',
+  '-C', 'link-arg=-Triscv32im-risc0-zkvm-elf.ld',
+]
 ```
 
 The dedicated `RISC Zero RV32 verifier port` GitHub workflow applies the patch
@@ -175,7 +185,33 @@ relation-use predicate, rejects host-only dependencies from the RV32 graph,
 pins `enum-ordinalize` 4.3.2 (the latest checked version compatible with the
 SDK's Rust 1.88 toolchain), enables RISC Zero's partial `std` runtime without
 also selecting its no-std entry macro, and compiles the full guest around the
-real `verify_cairo` call. Run `29351949727` passed this complete cross-compile
-in 1 minute 23 seconds. The next gate builds a release ELF and executes both
-checked-in proofs with the real local zkVM executor; failure must not be
-bypassed with a mock verifier.
+real `verify_cairo` call. The release guest supplies only the five compiler
+atomic ABI functions actually referenced by this single-hart RV32IM graph;
+they use compiler fences and volatile accesses and do not weaken STWO checks.
+The host executor lock pins the complete mutually compatible RISC Zero 3.0.4
+dependency family, avoiding the `impl Read` object-safety failure caused by a
+mixed `risc0-circuit-rv32im 4.0.4` graph.
+
+## Measured local execution
+
+Run `29364870460` validated that the ELF's executable `PT_LOAD` begins at RISC
+Zero `TEXT_START` `0x00200800` and that entry `0x005836b4` lies inside it. The
+measured artifacts are:
+
+| Artifact | Value |
+| --- | --- |
+| user ELF | 4,556,392 bytes; SHA-256 `d7782be6ed709b0489a6f7c4cf7ba41ef540cd70c8dc0ea95685d9086258f1b3` |
+| encoded program | 4,588,816 bytes; SHA-256 `5440480726db70569ab3a644322617c4d9c6e70bee26b5dd1f9a152299c4fa97` |
+| image ID | `62516f3521371587578fa93e3f9d8952bdf396d733c54079ac27f91864720484` |
+| owner exit | 2,551,810,043 cycles; 2,857 segments; max `po2` 20 |
+| virtual CET | 2,580,013,351 cycles; 2,889 segments; max `po2` 20 |
+
+Both sessions halted cleanly after the real `verify_cairo` call. Each journal
+proved `transaction_relation_valid = 1` while retaining
+`chain_state_verified = 0` and `operator_take_authorized = 0`. The executor
+required exactly 184 denial-evidence bytes and rejected any 32-byte
+authorization alias. `RISC0_EXECUTOR=local` was set explicitly; no Boundless,
+Bonsai, PrimeLab, or other proving-network request occurred. A local execution
+session is not a cryptographic RISC Zero receipt, so receipt generation and
+independent receipt verification remain mandatory before any enforcement
+claim.
