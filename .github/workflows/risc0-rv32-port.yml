@@ -108,9 +108,32 @@ jobs:
       - name: Compile the real STWO verifier call into the RV32 guest
         shell: bash
         run: |
-          set -euxo pipefail
+          set -uxo pipefail
+          set +e
           cargo +risc0 check \
             --manifest-path "${RUNNER_TEMP}/risc0-stwo-verifier-port/Cargo.toml" \
             --features risc0-guest \
             --target riscv32im-risc0-zkvm-elf \
-            --bin bark-stwo-guest
+            --bin bark-stwo-guest 2>&1 | tee "${RUNNER_TEMP}/rv32-build.log"
+          status="${PIPESTATUS[0]}"
+          set -e
+
+          if [[ "${status}" -ne 0 ]]; then
+            export RV32_BUILD_LOG="${RUNNER_TEMP}/rv32-build.log"
+            {
+              echo '## RV32 compiler diagnostic'
+              echo '```text'
+              tail -n 200 "${RV32_BUILD_LOG}"
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+            python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          lines = Path(os.environ["RV32_BUILD_LOG"]).read_text(errors="replace").splitlines()
+          diagnostic = "\n".join(lines[-120:])
+          escaped = diagnostic.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=RV32 compiler diagnostic::{escaped}")
+          PY
+            exit "${status}"
+          fi
