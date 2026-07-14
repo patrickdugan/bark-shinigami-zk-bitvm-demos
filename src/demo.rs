@@ -23,6 +23,8 @@ use crate::stwo_policy::StwoPolicyV1;
 pub const SHINIGAMI_COMMIT: &str = "565d7c7375bd090047137da702b2bfdcd48ec58d";
 pub const CAIRO_EXECUTABLE_SHA256: &str =
     "5b1e4c7c4a545b5ee34c06d672cfa1d4e3e38b732951c60a65a5dcdaba4b5c22";
+pub const STWO_PROGRAM_HASH: &str =
+    "0xbcd09f617edcfc9ee2bbbb74192f42dfed6b7a505578a3748ac93f8ad697f0";
 pub const CAIRO_RELATION_ID: &str = concat!(
     "bark-shinigami-relation-v4-chain-state-fail-closed;",
     "shinigami=565d7c7375bd090047137da702b2bfdcd48ec58d;",
@@ -388,6 +390,9 @@ pub fn build_receipt(case: DemoCase) -> Value {
             "arguments_sha256": "d7d629bfadbd990307930c0c9aade202a746696503cd488f616d75a82779dd8b",
             "proof_sha256": "3917b6d9fc6b53aef98221a37962034af5109c16036ede06dd16275d94696072",
             "proof_path": "proof-evidence/owner_exit_allow.stwo.bin",
+            "verified_output_path": "proof-evidence/owner_exit_allow.verified-output.json",
+            "stwo_program_hash": STWO_PROGRAM_HASH,
+            "relation_output_prefix": [1, 0, 0],
         }),
         DemoCase::OwnerExitChallenge => json!({
             "status": "rejected_before_proof",
@@ -399,6 +404,9 @@ pub fn build_receipt(case: DemoCase) -> Value {
             "arguments_sha256": "58cdc15ebe5725b3a0b694cde16a83356c1c8ca16c741ca9d80ec7aff2bc807f",
             "proof_sha256": "27918852ae2590972f7401873b9f888a459de6a030c2e1c2bc082512e8cdc87e",
             "proof_path": "proof-evidence/virtual_cet_guard.stwo.bin",
+            "verified_output_path": "proof-evidence/virtual_cet_guard.verified-output.json",
+            "stwo_program_hash": STWO_PROGRAM_HASH,
+            "relation_output_prefix": [1, 0, 0],
         }),
     };
     json!({

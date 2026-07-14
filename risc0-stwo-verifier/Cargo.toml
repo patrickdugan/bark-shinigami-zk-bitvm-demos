@@ -1,0 +1,49 @@
+[package]
+name = "bark-risc0-stwo-verifier"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+resolver = "2"
+
+[features]
+default = []
+std = ["sha2/std"]
+# The pinned upstream verifier works on a native host, but its Cairo-specific
+# crate graph is not yet compatible with the RISC Zero RV32 guest target.
+upstream-stwo = [
+    "std",
+    "dep:bincode",
+    "dep:bzip2",
+    "dep:cairo-air",
+    "dep:ruint",
+    "dep:stwo",
+]
+risc0-guest = ["std", "dep:risc0-zkvm", "upstream-stwo"]
+
+[dependencies]
+sha2 = { version = "=0.10.9", default-features = false }
+
+# These are deliberately optional. Enabling them gives a real native verifier;
+# it never substitutes a fixture flag or mock result for verify_cairo.
+bincode = { version = "=1.3.3", optional = true }
+bzip2 = { version = "=0.5.2", default-features = false, features = ["libbz2-rs-sys"], optional = true }
+cairo-air = { git = "https://github.com/starkware-libs/stwo-cairo.git", rev = "b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1", optional = true }
+# RISC Zero requires `^1.15`; pin its lowest compatible release because newer
+# ruint releases need const features absent from STWO's pinned nightly.
+ruint = { version = "=1.15.0", optional = true }
+stwo = { git = "https://github.com/starkware-libs/stwo.git", rev = "93dd93e0", optional = true }
+risc0-zkvm = { version = "=3.0.4", default-features = false, optional = true }
+
+[[bin]]
+name = "bark-stwo-guest"
+path = "src/bin/bark_stwo_guest.rs"
+required-features = ["risc0-guest"]
+
+[package.metadata.proof-pins]
+stwo-cairo-commit = "b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1"
+stwo-commit = "93dd93e0"
+rust-toolchain = "nightly-2025-06-23"
+risc0-zkvm = "3.0.4"
+proof-format = "bzip2(bincode(CairoProofForRustVerifier<Blake2sMerkleHasher>))"

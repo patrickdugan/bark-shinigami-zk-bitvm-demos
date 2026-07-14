@@ -1,0 +1,58 @@
+diff --git a/stwo_cairo_prover/crates/dev_utils/src/bin/verify_binary.rs b/stwo_cairo_prover/crates/dev_utils/src/bin/verify_binary.rs
+new file mode 100644
+index 0000000..bbfec1a
+--- /dev/null
++++ b/stwo_cairo_prover/crates/dev_utils/src/bin/verify_binary.rs
+@@ -0,0 +1,52 @@
++use std::path::PathBuf;
++
++use anyhow::Result;
++use cairo_air::utils::{
++    deserialize_proof_from_file, get_verification_output, ProofFormat, VerificationOutput,
++};
++use cairo_air::verifier::verify_cairo;
++use cairo_air::CairoProofForRustVerifier;
++use clap::Parser;
++use serde::Serialize;
++use stwo::core::vcs_lifted::blake2_merkle::{Blake2sMerkleChannel, Blake2sMerkleHasher};
++
++#[derive(Parser, Debug)]
++struct Args {
++    /// Path to a bzip2-compressed bincode Cairo proof.
++    #[arg(long = "proof_path")]
++    proof_path: PathBuf,
++}
++
++#[derive(Serialize)]
++struct VerifiedOutput {
++    program_hash: String,
++    output: Vec<String>,
++}
++
++impl From<VerificationOutput> for VerifiedOutput {
++    fn from(value: VerificationOutput) -> Self {
++        Self {
++            program_hash: format!("{:#x}", value.program_hash),
++            output: value
++                .output
++                .into_iter()
++                .map(|felt| format!("{felt:#x}"))
++                .collect(),
++        }
++    }
++}
++
++fn main() -> Result<()> {
++    let args = Args::parse();
++    let proof: CairoProofForRustVerifier<Blake2sMerkleHasher> =
++        deserialize_proof_from_file(&args.proof_path, ProofFormat::Binary)?;
++    let public_output = get_verification_output(&proof.claim.public_data.public_memory);
++
++    verify_cairo::<Blake2sMerkleChannel>(proof)?;
++
++    println!(
++        "{}",
++        serde_json::to_string_pretty(&VerifiedOutput::from(public_output))?
++    );
++    Ok(())
++}

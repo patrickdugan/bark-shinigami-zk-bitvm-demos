@@ -9,6 +9,8 @@ on:
       - .github/workflows/prove-stwo-owner.yml
       - cairo-shinigami/**
       - proof-inputs/**
+      - proof-evidence/*.verified-output.json
+      - stwo-cairo-binary-verifier.patch
       - stwo-cairo-public-segments.patch
 
 permissions:
@@ -30,6 +32,7 @@ jobs:
       EXPECTED_CHALLENGE_ARGUMENTS_SHA256: dc1e58f1473925abcd4409dacb2019f3c2b2db16d28e00fa8cdee5dd118da691
       EXPECTED_CET_ARGUMENTS_SHA256: 58cdc15ebe5725b3a0b694cde16a83356c1c8ca16c741ca9d80ec7aff2bc807f
       EXPECTED_EXECUTABLE_SHA256: 5b1e4c7c4a545b5ee34c06d672cfa1d4e3e38b732951c60a65a5dcdaba4b5c22
+      EXPECTED_BINARY_VERIFIER_PATCH_SHA256: e18e2abca9d44c7af1b6bbfec2d3d1524d944ee6b5394345b8c10fa579f8f6d5
       EXPECTED_PATCH_SHA256: ed5027b67ee3798ef2f1467604816cc5efb8e44cedf6083d329ae8f8e4227a71
 
     steps:
@@ -80,6 +83,7 @@ jobs:
           echo "${EXPECTED_OWNER_ARGUMENTS_SHA256}  proof-inputs/owner_exit_allow.arguments.json" | sha256sum --check
           echo "${EXPECTED_CHALLENGE_ARGUMENTS_SHA256}  proof-inputs/owner_exit_challenge.arguments.json" | sha256sum --check
           echo "${EXPECTED_CET_ARGUMENTS_SHA256}  proof-inputs/virtual_cet_guard.arguments.json" | sha256sum --check
+          echo "${EXPECTED_BINARY_VERIFIER_PATCH_SHA256}  stwo-cairo-binary-verifier.patch" | sha256sum --check
           echo "${EXPECTED_PATCH_SHA256}  stwo-cairo-public-segments.patch" | sha256sum --check
 
       - name: Build patched STWO Cairo prover
@@ -91,11 +95,15 @@ jobs:
           git -C stwo-cairo checkout "${STWO_CAIRO_COMMIT}"
           git -C stwo-cairo apply --unidiff-zero \
             "${GITHUB_WORKSPACE}/stwo-cairo-public-segments.patch"
+          git -C stwo-cairo apply \
+            "${GITHUB_WORKSPACE}/stwo-cairo-binary-verifier.patch"
           git -C stwo-cairo diff --check
           cd stwo-cairo/stwo_cairo_prover
           RUSTFLAGS="-C target-cpu=native -C opt-level=3" \
             cargo +nightly-2025-06-23 build --release \
-              -p stwo-cairo-dev-utils --bin run_and_prove
+              -p stwo-cairo-dev-utils \
+              --bin run_and_prove \
+              --bin verify_binary
 
       - name: Add swap for the memory-bound prover
         shell: bash
@@ -152,13 +160,44 @@ jobs:
             fi
           done
           if [ "${proof_status}" -eq 0 ]; then
+            verifier=stwo-cairo/stwo_cairo_prover/target/release/verify_binary
+            "${verifier}" \
+              --proof_path proofs/owner_exit_allow.stwo.bin \
+              > proofs/owner_exit_allow.verified-output.json
+            "${verifier}" \
+              --proof_path proofs/virtual_cet_guard.stwo.bin \
+              > proofs/virtual_cet_guard.verified-output.json
+            diff -u \
+              proof-evidence/owner_exit_allow.verified-output.json \
+              proofs/owner_exit_allow.verified-output.json
+            diff -u \
+              proof-evidence/virtual_cet_guard.verified-output.json \
+              proofs/virtual_cet_guard.verified-output.json
+
+            cp proofs/owner_exit_allow.stwo.bin proofs/owner_exit_allow.tampered.stwo.bin
+            original_byte="$(od -An -tu1 -j 512 -N 1 proofs/owner_exit_allow.tampered.stwo.bin)"
+            mutated_byte="$((original_byte ^ 1))"
+            printf "\\$(printf '%03o' "${mutated_byte}")" \
+              | dd of=proofs/owner_exit_allow.tampered.stwo.bin \
+                  bs=1 seek=512 count=1 conv=notrunc status=none
+            if "${verifier}" \
+              --proof_path proofs/owner_exit_allow.tampered.stwo.bin \
+              > proofs/owner_exit_allow.tampered.log 2>&1; then
+              echo "tampered serialized proof unexpectedly verified" >&2
+              exit 1
+            fi
+            rm proofs/owner_exit_allow.tampered.stwo.bin
+
             sha256sum \
               cairo-shinigami/target/dev/bark_shinigami_relation.executable.json \
               proof-inputs/owner_exit_allow.arguments.json \
               proof-inputs/owner_exit_challenge.arguments.json \
               proof-inputs/virtual_cet_guard.arguments.json \
               proofs/owner_exit_allow.stwo.bin \
+              proofs/owner_exit_allow.verified-output.json \
               proofs/virtual_cet_guard.stwo.bin \
+              proofs/virtual_cet_guard.verified-output.json \
+              stwo-cairo-binary-verifier.patch \
               stwo-cairo-public-segments.patch \
               | tee proofs/SHA256SUMS
           fi

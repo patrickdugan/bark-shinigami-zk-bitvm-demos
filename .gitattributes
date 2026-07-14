@@ -4,6 +4,7 @@ cairo/** text eol=lf
 cairo-shinigami/** text eol=lf
 proof-inputs/*.json text eol=lf
 proof-evidence/*.bin binary
+proof-evidence/*.json text eol=lf
 proof-evidence/*.txt text eol=lf
 *.rs text eol=lf
 *.toml text eol=lf

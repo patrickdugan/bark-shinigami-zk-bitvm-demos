@@ -50,6 +50,14 @@ reports `not_enforced` and never authorizes the operator-take path.
   ran its internal verifier, and required the dishonest output mutation to
   fail without emitting a proof. The proofs and measurements are checked in
   under [`proof-evidence/`](proof-evidence/README.md).
+- A pinned binary-proof reload verifier that deserializes the saved artifacts,
+  invokes STWO's real `verify_cairo`, records the authenticated program hash
+  and exact 19-felt outputs, and rejects a mutated serialized proof.
+- A fail-closed [`risc0-stwo-verifier/`](risc0-stwo-verifier/README.md)
+  scaffold and exact [`RISC0_STWO_DESIGN.md`](RISC0_STWO_DESIGN.md) recursion
+  contract. The native adapter uses the real upstream verifier; the RV32 guest
+  deliberately refuses to build until Cairo-AIR is split into a verifier-only
+  guest-compatible dependency graph.
 - Strict Boundless `Blake3Groth16V0_1` parsing: selector `62f049f6`, 32-byte
   journal, 256-byte raw proof, one canonical BN254 public scalar, and
   claim-specific BitVM2 GitHub provenance checks.

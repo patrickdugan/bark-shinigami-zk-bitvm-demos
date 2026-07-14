@@ -56,8 +56,8 @@ graph has passed Bitcoin Core relay/package testing.
 
 ## Executed gates
 
-- Rust all-target suite: 57 tests passed (39 library, 3 fixture, 4 adversarial
-  corpus, 11 BitVMX); zero failed.
+- Rust all-target suite: 64 tests passed (39 library, 3 fixture, 4 adversarial
+  corpus, 11 BitVMX, 7 STWO-evidence); zero failed.
 - Boundless/BitVM adapter: official reference receipt accepted; proof mutation,
   field alias, unrelated receipt, image mutation, statement mutation, and
   different fixed claim rejected.
@@ -77,6 +77,16 @@ graph has passed Bitcoin Core relay/package testing.
 - CET proof: 1,149,083 bytes, SHA-256
   `27918852ae2590972f7401873b9f888a459de6a030c2e1c2bc082512e8cdc87e`,
   1:41.77, 15,442,736 KiB peak RSS.
+- The saved binary proofs were independently decompressed, deserialized and
+  reverified with the pinned native `verify_cairo` path. Both authenticate
+  program hash
+  `0xbcd09f617edcfc9ee2bbbb74192f42dfed6b7a505578a3748ac93f8ad697f0`
+  and exact 19-felt outputs beginning `1, 0, 0`. A one-byte serialized-proof
+  mutation was rejected.
+- Seven new evidence-boundary tests reject proof tampering, cross-case
+  substitution, stale fixed-proof replay against a fresh nonce, incomplete
+  checksum coverage, and any attempt to treat checksum provenance as
+  cryptographic authorization.
 
 Reproduce the executable red gate with:
 
@@ -98,3 +108,8 @@ complete bond assertion/disprove/take graph, Bitcoin Core regtest package
 acceptance, and a fresh permissionless-watcher disprove. Until all of those
 artifacts exist, every receipt remains `not_enforced` and
 `operator_take_authorized=false`.
+
+The new RISC Zero verifier crate is intentionally a scaffold: its portable
+binding layer has seven passing tests and its native adapter calls the real
+upstream verifier, but the guest policy pins remain zero and RV32 compilation
+is a deliberate error until the Cairo-AIR verifier-only port is completed.
