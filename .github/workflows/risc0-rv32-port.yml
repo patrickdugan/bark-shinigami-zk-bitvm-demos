@@ -229,6 +229,37 @@ jobs:
           set -uxo pipefail
           output="${RUNNER_TEMP}/risc0-stwo-evidence"
           mkdir -p "${output}"
+          python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          packages = {
+              package["name"]: package["version"]
+              for package in tomllib.loads(
+                  Path("risc0-stwo-executor/Cargo.lock").read_text()
+              )["package"]
+              if package["name"].startswith("risc0-")
+          }
+          expected = {
+              "risc0-binfmt": "3.0.3",
+              "risc0-build": "3.0.4",
+              "risc0-build-kernel": "2.0.1",
+              "risc0-circuit-keccak": "4.0.3",
+              "risc0-circuit-keccak-sys": "4.0.1",
+              "risc0-circuit-recursion": "4.0.3",
+              "risc0-circuit-recursion-sys": "4.0.1",
+              "risc0-circuit-rv32im": "4.0.3",
+              "risc0-circuit-rv32im-sys": "4.0.1",
+              "risc0-core": "3.0.0",
+              "risc0-groth16": "3.0.3",
+              "risc0-sys": "1.5.0",
+              "risc0-zkos-v1compat": "2.2.1",
+              "risc0-zkp": "3.0.3",
+              "risc0-zkvm": "3.0.4",
+              "risc0-zkvm-platform": "2.2.1",
+          }
+          assert packages == expected, (packages, expected)
+          PY
           set +e
           cargo build \
             --locked \

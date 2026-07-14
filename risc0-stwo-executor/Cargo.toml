@@ -13,7 +13,8 @@ local = ["risc0-zkvm/prove"]
 
 [dependencies]
 anyhow = "=1.0.103"
-# Keep the host build helper on the same patch release as the zkVM SDK rather
-# than accepting Cargo's otherwise-compatible 3.0.5.
+# Keep the host build helper on the same patch release as the zkVM SDK. The
+# checked-in lock and CI gate also match every RISC Zero crate in v3.0.4's
+# official workspace lock; later semver-compatible circuit crates changed ABI.
 risc0-build = "=3.0.4"
 risc0-zkvm = { version = "=3.0.4", default-features = false, features = ["client"] }
