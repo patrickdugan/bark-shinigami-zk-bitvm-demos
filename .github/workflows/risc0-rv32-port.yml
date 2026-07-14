@@ -175,9 +175,7 @@ jobs:
           cd "${RUNNER_TEMP}/risc0-stwo-verifier-port"
           output="${RUNNER_TEMP}/risc0-stwo-evidence"
           mkdir -p "${output}"
-          # RV32IM has no A extension. Keep these trace-only linker flags until
-          # every remaining compiler atomic ABI reference is attributed.
-          export RUSTFLAGS='--cfg getrandom_backend="custom" -C link-arg=--trace-symbol=__atomic_load_4 -C link-arg=--trace-symbol=__atomic_store_4 -C link-arg=--trace-symbol=__atomic_load_1 -C link-arg=--trace-symbol=__atomic_store_1 -C link-arg=--trace-symbol=__atomic_compare_exchange_1'
+          export RUSTFLAGS='--cfg getrandom_backend="custom" -C link-arg=-Triscv32im-risc0-zkvm-elf.ld'
           set +e
           cargo +risc0 build \
             --locked \
@@ -222,6 +220,11 @@ jobs:
           PY
             exit "${status}"
           fi
+
+          elf="${RUNNER_TEMP}/risc0-stwo-verifier-port/target/riscv32im-risc0-zkvm-elf/release/bark-stwo-guest"
+          readelf -h -l "${elf}" | tee "${output}/rv32-elf-layout.txt"
+          grep -E 'Entry point address: +0x200800' "${output}/rv32-elf-layout.txt"
+          grep -E 'LOAD +0x[0-9a-f]+ +0x00200800 +0x00200800' "${output}/rv32-elf-layout.txt"
 
       - name: Build the pinned local zkVM executor
         shell: bash
