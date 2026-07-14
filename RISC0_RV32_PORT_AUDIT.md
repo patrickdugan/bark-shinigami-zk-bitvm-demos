@@ -34,6 +34,10 @@ the verifier never asks for randomness:
 rustflags = ['--cfg', 'getrandom_backend="custom"']
 ```
 
+Cargo must be launched from the guest crate (or receive equivalent explicit
+flags), because configuration discovery starts at the process working
+directory rather than at an arbitrary `--manifest-path`.
+
 Without it, `getrandom 0.3.4`, reached through
 `risc0-zkvm-platform 2.2.2`, stops at its unsupported-target
 `compile_error!`.

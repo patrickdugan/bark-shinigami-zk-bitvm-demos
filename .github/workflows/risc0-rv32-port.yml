@@ -94,6 +94,7 @@ jobs:
           lib_path.write_text(lib.replace(guard, ""))
           PY
 
+          cd "$(dirname "${PORT_MANIFEST}")"
           cargo +risc0 update \
             --manifest-path "${PORT_MANIFEST}" \
             --package enum-ordinalize \
@@ -107,6 +108,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
+          cd "${RUNNER_TEMP}/risc0-stwo-verifier-port"
           cargo +risc0 tree \
             --manifest-path "${RUNNER_TEMP}/risc0-stwo-verifier-port/Cargo.toml" \
             --features risc0-guest \
@@ -120,6 +122,7 @@ jobs:
         shell: bash
         run: |
           set -uxo pipefail
+          cd "${RUNNER_TEMP}/risc0-stwo-verifier-port"
           set +e
           cargo +risc0 check \
             --locked \
