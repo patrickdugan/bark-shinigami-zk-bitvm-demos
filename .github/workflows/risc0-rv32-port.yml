@@ -10,6 +10,7 @@ on:
       - RISC0_RV32_PORT_AUDIT.md
       - stwo-cairo-risc0-verifier-only.patch
       - risc0-stwo-verifier/**
+      - risc0-stwo-executor/**
 
 permissions:
   contents: read
@@ -123,14 +124,15 @@ jobs:
           grep -F 'enum-ordinalize-derive v4.3.2' "${RUNNER_TEMP}/rv32-tree.txt"
           ! grep -E '(^| )sonic-rs v|(^| )clap v|(^| )serde_json v|(^| )rayon v' "${RUNNER_TEMP}/rv32-tree.txt"
 
-      - name: Compile the real STWO verifier call into the RV32 guest
+      - name: Build the real STWO verifier call into an RV32 ELF
         shell: bash
         run: |
           set -uxo pipefail
           cd "${RUNNER_TEMP}/risc0-stwo-verifier-port"
           set +e
-          cargo +risc0 check \
+          cargo +risc0 build \
             --locked \
+            --release \
             --manifest-path "${RUNNER_TEMP}/risc0-stwo-verifier-port/Cargo.toml" \
             --features risc0-guest \
             --target riscv32im-risc0-zkvm-elf \
@@ -157,3 +159,103 @@ jobs:
           PY
             exit "${status}"
           fi
+
+      - name: Build the pinned local zkVM executor
+        shell: bash
+        run: |
+          set -uxo pipefail
+          output="${RUNNER_TEMP}/risc0-stwo-evidence"
+          mkdir -p "${output}"
+          set +e
+          cargo build \
+            --locked \
+            --release \
+            --features local \
+            --manifest-path risc0-stwo-executor/Cargo.toml \
+            2>&1 | tee "${output}/host-build.log"
+          status="${PIPESTATUS[0]}"
+          set -e
+          if [[ "${status}" -ne 0 ]]; then
+            export RISC0_HOST_BUILD_LOG="${output}/host-build.log"
+            python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          lines = Path(os.environ["RISC0_HOST_BUILD_LOG"]).read_text(errors="replace").splitlines()
+          diagnostic = "\n".join(lines[-120:])
+          escaped = diagnostic.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=RISC Zero host build diagnostic::{escaped}")
+          PY
+            exit "${status}"
+          fi
+          rm "${output}/host-build.log"
+
+      - name: Execute both real STWO proofs inside the zkVM
+        shell: bash
+        run: |
+          set -uxo pipefail
+          elf="${RUNNER_TEMP}/risc0-stwo-verifier-port/target/riscv32im-risc0-zkvm-elf/release/bark-stwo-guest"
+          executor="${GITHUB_WORKSPACE}/risc0-stwo-executor/target/release/bark-risc0-stwo-executor"
+          output="${RUNNER_TEMP}/risc0-stwo-evidence"
+          test -x "${elf}"
+          test -x "${executor}"
+          mkdir -p "${output}"
+
+          set +e
+          RISC0_EXECUTOR=local "${executor}" \
+            "${elf}" \
+            proof-evidence/owner_exit_allow.stwo.bin \
+            34962f16168196bd39f9b516c9ef5afb8da4bfd70638d0fd3767defc266cb9be \
+            > "${output}/owner_exit_allow.execution.json" \
+            2> "${output}/owner_exit_allow.execution.log"
+          owner_status="$?"
+          RISC0_EXECUTOR=local "${executor}" \
+            "${elf}" \
+            proof-evidence/virtual_cet_guard.stwo.bin \
+            672e302333c83d08a943dc21873f9cb80d0057c3a9869cda38e9f74290361245 \
+            > "${output}/virtual_cet_guard.execution.json" \
+            2> "${output}/virtual_cet_guard.execution.log"
+          cet_status="$?"
+          set -e
+
+          if [[ "${owner_status}" -ne 0 || "${cet_status}" -ne 0 ]]; then
+            export RV32_EXECUTION_LOG="${output}/combined.log"
+            cat "${output}"/*.execution.log > "${RV32_EXECUTION_LOG}"
+            {
+              echo '## RV32 execution diagnostic'
+              echo '```text'
+              tail -n 200 "${RV32_EXECUTION_LOG}"
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+            python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          lines = Path(os.environ["RV32_EXECUTION_LOG"]).read_text(errors="replace").splitlines()
+          diagnostic = "\n".join(lines[-120:])
+          escaped = diagnostic.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=RV32 execution diagnostic::{escaped}")
+          PY
+            exit 1
+          fi
+
+          sha256sum \
+            "${elf}" \
+            "${output}"/*.execution.json \
+            > "${output}/SHA256SUMS"
+          cp "${elf}" "${output}/bark-stwo-guest.elf"
+          {
+            echo '## Verified zkVM denial evidence'
+            echo '```json'
+            cat "${output}"/*.execution.json
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload the measured ELF and execution evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: risc0-stwo-execution-${{ github.sha }}
+          path: ${{ runner.temp }}/risc0-stwo-evidence/**
+          if-no-files-found: warn
+          retention-days: 14

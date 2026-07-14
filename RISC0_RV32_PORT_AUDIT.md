@@ -1,8 +1,10 @@
 # RISC Zero RV32 verifier-port audit
 
-Status: **verifier-only patch implemented; RV32 CI pending; fail closed**. This
-audit removes no verification check and introduces no host-supplied acceptance
-value.
+Status: **real verifier cross-compiles for RV32; zkVM execution pending; fail
+closed**. GitHub run
+[`29351949727`](https://github.com/patrickdugan/bark-shinigami-zk-bitvm-demos/actions/runs/29351949727)
+compiled the complete guest successfully. This audit removes no verification
+check and introduces no host-supplied acceptance value.
 
 ## Reproduced boundary
 
@@ -18,7 +20,8 @@ The only source change before cross-compilation was removal of the deliberate
 `verify_cairo::<Blake2sMerkleChannel>` function.
 
 RISC Zero does not publish its custom Rust target for native Windows. The real
-cross-check therefore ran under Ubuntu WSL with official RISC Zero Rust and:
+cross-check therefore runs on a GitHub Ubuntu runner with official RISC Zero
+Rust and:
 
 ```text
 cargo +risc0 check \
@@ -103,11 +106,12 @@ The smallest defensible upstream patch is:
    the two checked-in proofs through the resulting guest before measuring and
    pinning its image ID.
 
-Do not remove the scaffold's compile guard until that build succeeds. Do not
-replace `verify_cairo` with a Boolean, a host attestation, or a development
-receipt. A compile-only CI job should pin all four versions (RISC Zero Rust,
-SDK, STWO, and `stwo-cairo`) so an incompatible latest toolchain cannot mask a
-real regression.
+The direct-build compile guard remains because Cargo cannot apply the checked-in
+upstream patch by itself. The GitHub workflow removes it only in an isolated
+copy after the exact patch applies and its file scope is checked. Do not replace
+`verify_cairo` with a Boolean, a host attestation, or a development receipt.
+The CI job pins all four versions (RISC Zero Rust, SDK, STWO, and `stwo-cairo`)
+so an incompatible latest toolchain cannot mask a real regression.
 
 ## Checked-in verifier-only patch
 
@@ -169,7 +173,9 @@ The dedicated `RISC Zero RV32 verifier port` GitHub workflow applies the patch
 to a clean pinned checkout, asserts its exact file scope and unchanged
 relation-use predicate, rejects host-only dependencies from the RV32 graph,
 pins `enum-ordinalize` 4.3.2 (the latest checked version compatible with the
-SDK's Rust 1.88 toolchain), and compiles the full guest around the real
-`verify_cairo` call. The local RV32 dependency compile was intentionally
-stopped before completion; the next exact blocker, if any, belongs in that
-GitHub log and must not be bypassed with a mock verifier.
+SDK's Rust 1.88 toolchain), enables RISC Zero's partial `std` runtime without
+also selecting its no-std entry macro, and compiles the full guest around the
+real `verify_cairo` call. Run `29351949727` passed this complete cross-compile
+in 1 minute 23 seconds. The next gate builds a release ELF and executes both
+checked-in proofs with the real local zkVM executor; failure must not be
+bypassed with a mock verifier.

@@ -41,6 +41,22 @@ fn checked_in_proofs_verify_but_cannot_emit_an_authorization_journal() {
         )
         .unwrap();
         let verified = verify_compressed_binary(&proof).expect("real STWO proof must verify");
+        let program_commitment =
+            decode_hex_32("4c75023ef37407be739a93eab0f17ff624ba716e07efab796af59846714ef067");
+        let policy_commitment =
+            decode_hex_32("626cd38f63851c1067c7ee1594ae880694255346c0a179d68c0bfff571955314");
+        assert_eq!(verified.program_commitment(), &program_commitment);
+        assert_eq!(verified.stwo_policy_commitment(), &policy_commitment);
+        let policy = VerificationPolicy::new(program_commitment, policy_commitment);
+        let evidence = verified
+            .verification_evidence_journal(&policy)
+            .expect("real proof must match the pinned program and policy");
+        assert_eq!(evidence.as_bytes().len(), 184);
+        assert_eq!(&evidence.as_bytes()[0..8], b"BARKZKVE");
+        assert_eq!(
+            &evidence.as_bytes()[120..152],
+            &decode_hex_32(expected_statement_digest)
+        );
         assert_eq!(
             verified.stwo_program_hash_be(),
             &decode_hex_32("00bcd09f617edcfc9ee2bbbb74192f42dfed6b7a505578a3748ac93f8ad697f0")
@@ -53,8 +69,8 @@ fn checked_in_proofs_verify_but_cannot_emit_an_authorization_journal() {
             decode_hex_32(expected_statement_digest)
         );
         assert_eq!(
-            verified.authorization_journal(&VerificationPolicy::new([0; 32], [0; 32])),
-            Err(BindingError::MissingProgramPin)
+            verified.authorization_journal(&policy),
+            Err(BindingError::ChainStateNotVerified)
         );
     }
 }

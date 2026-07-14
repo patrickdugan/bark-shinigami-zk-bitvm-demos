@@ -60,9 +60,10 @@ reports `not_enforced` and never authorizes the operator-take path.
   contract. It strictly parses the complete guest frame and Bark envelope,
   binds the two image IDs in one operation, and encodes the exact 378-byte
   artifact journal. The native adapter uses the real upstream verifier; the
-  checked-in RV32 guest remains guarded while a reviewable verifier-only
-  `stwo-cairo` patch and dedicated GitHub cross-compile job test the real
-  `verify_cairo` path. The reproduced target failures and exact port are in
+  reviewable verifier-only `stwo-cairo` patch and dedicated GitHub job now
+  cross-compile the real `verify_cairo` path successfully and proceed to
+  execute both proof artifacts for image/cycle measurements. The reproduced
+  target failures and exact port are in
   [`RISC0_RV32_PORT_AUDIT.md`](RISC0_RV32_PORT_AUDIT.md).
 - Strict Boundless `Blake3Groth16V0_1` parsing: selector `62f049f6`, 32-byte
   journal, 256-byte raw proof, one canonical BN254 public scalar, and

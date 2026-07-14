@@ -1,10 +1,10 @@
 # RISC Zero recursion contract for the Shinigami STWO relation
 
-Status: design specification, not an enforcement claim. A fail-closed RISC Zero
-guest scaffold and reviewable upstream verifier-only patch now exist; the
-checked-in guest remains guarded pending the dedicated RV32 cross-compile and
-does not yet satisfy this contract. No receipt, Boundless request, or BitVM
-transaction graph satisfying this document exists yet.
+Status: design specification, not an enforcement claim. The real STWO verifier
+now cross-compiles inside the RISC Zero RV32 guest with a reviewable upstream
+patch. Guest execution, receipt generation and the complete framed-input
+contract remain pending. No Boundless request or BitVM transaction graph
+satisfying this document exists yet.
 
 This document defines one public statement from the compressed STWO proof all
 the way to the claim-specialized BitVM Groth16 key. It deliberately binds exact
@@ -333,16 +333,17 @@ data is:
    Final recursive proofs require a nonzero guest image ID and regeneration of
    the Cairo executable, arguments, and STWO proofs under the non-circular build
    order above.
-5. **The RISC Zero crate is a fail-closed scaffold, not a guest artifact.**
+5. **The RISC Zero crate is not yet a measured guest artifact.**
    `risc0-stwo-verifier/` now strictly parses the complete framed input and Bark
    envelope, performs a typed image-ID handshake, implements the fixed-width
    journal record, and has a native adapter to the real upstream verifier. The
-   guest binary does not yet call those complete bindings: `cairo-air` is not
-   RV32-compatible, the zkVM build intentionally stops at `compile_error!`, and
-   its policy pins remain zero. There is no ELF, image ID, execution receipt, or
-   measured cycle/memory bound. `RISC0_RV32_PORT_AUDIT.md` records the real
-   target failures: an SDK/toolchain mismatch and host-only `sonic-rs` in the
-   unconditional Cairo-AIR graph.
+   guest's real `verify_cairo` call now cross-compiles after the exact verifier-
+   only patch, and its program and verifier-policy pins are nonzero. It emits a
+   type-distinct 184-byte verification record when the proven relation denies
+   authorization. It does not yet consume the complete framed binding, and
+   there is no measured ELF, image ID, execution receipt, or cycle/memory
+   bound. `RISC0_RV32_PORT_AUDIT.md` records the fixed packaging and runtime
+   blockers.
 6. **No Boundless receipt exists for this guest/journal.** There is no request,
    real 260-byte selectable seal, reconstructed claim, or locally verified
    claim digest.

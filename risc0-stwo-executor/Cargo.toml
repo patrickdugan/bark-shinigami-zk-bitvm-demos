@@ -1,0 +1,19 @@
+[package]
+name = "bark-risc0-stwo-executor"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+resolver = "2"
+
+[features]
+default = ["local"]
+local = ["risc0-zkvm/prove"]
+
+[dependencies]
+anyhow = "=1.0.103"
+# Keep the host build helper on the same patch release as the zkVM SDK rather
+# than accepting Cargo's otherwise-compatible 3.0.5.
+risc0-build = "=3.0.4"
+risc0-zkvm = { version = "=3.0.4", default-features = false, features = ["client"] }

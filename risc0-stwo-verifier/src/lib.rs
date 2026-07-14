@@ -199,12 +199,44 @@ impl VerifiedExecution {
         &self.stwo_program_hash_be
     }
 
-    /// Returns the only journal shape allowed to reach Boundless. Failure means
-    /// the guest must abort and commit no authorization journal.
-    pub fn authorization_journal(
+    /// Commitment to the exact public program-memory cells authenticated by
+    /// the verified proof.
+    pub fn program_commitment(&self) -> &[u8; 32] {
+        &self.program_commitment
+    }
+
+    /// Commitment to the exact PCS/FRI/channel policy authenticated by the
+    /// verified proof.
+    pub fn stwo_policy_commitment(&self) -> &[u8; 32] {
+        &self.stwo_policy_commitment
+    }
+
+    /// Emits proof-verified evidence that is deliberately a different wire
+    /// type from the 32-byte authorization journal. The outer verifier must
+    /// never interpret this record as permission to spend.
+    pub fn verification_evidence_journal(
         &self,
         policy: &VerificationPolicy,
-    ) -> Result<AuthorizationJournal, BindingError> {
+    ) -> Result<VerificationEvidenceJournal, BindingError> {
+        self.validate_policy(policy)?;
+
+        let mut bytes = [0u8; VerificationEvidenceJournal::LEN];
+        bytes[0..8].copy_from_slice(b"BARKZKVE");
+        bytes[8..12].copy_from_slice(&1u32.to_be_bytes());
+        bytes[12..16]
+            .copy_from_slice(&(self.output.transaction_relation_valid() as u32).to_be_bytes());
+        bytes[16..20].copy_from_slice(&(self.output.chain_state_verified() as u32).to_be_bytes());
+        bytes[20..24]
+            .copy_from_slice(&(self.output.operator_take_authorized() as u32).to_be_bytes());
+        bytes[24..56].copy_from_slice(&self.stwo_program_hash_be);
+        bytes[56..88].copy_from_slice(&self.program_commitment);
+        bytes[88..120].copy_from_slice(&self.stwo_policy_commitment);
+        bytes[120..152].copy_from_slice(&self.output.statement_digest());
+        bytes[152..184].copy_from_slice(&self.output.taproot_sighash());
+        Ok(VerificationEvidenceJournal(bytes))
+    }
+
+    fn validate_policy(&self, policy: &VerificationPolicy) -> Result<(), BindingError> {
         policy.validate()?;
         if self.program_commitment != policy.expected_program_commitment {
             return Err(BindingError::ProgramMismatch);
@@ -212,6 +244,17 @@ impl VerifiedExecution {
         if self.stwo_policy_commitment != policy.expected_stwo_policy_commitment {
             return Err(BindingError::PolicyMismatch);
         }
+        Ok(())
+    }
+
+    /// Returns the only journal shape allowed to reach Boundless. Failure means
+    /// the guest must commit no authorization journal; it may commit the
+    /// distinctly typed [`VerificationEvidenceJournal`] as denial evidence.
+    pub fn authorization_journal(
+        &self,
+        policy: &VerificationPolicy,
+    ) -> Result<AuthorizationJournal, BindingError> {
+        self.validate_policy(policy)?;
         if !self.output.transaction_relation_valid() {
             return Err(BindingError::TransactionRelationInvalid);
         }
@@ -222,6 +265,24 @@ impl VerifiedExecution {
             return Err(BindingError::OperatorTakeNotAuthorized);
         }
         Ok(AuthorizationJournal(self.output.statement_digest()))
+    }
+}
+
+/// A proof-verified, policy-pinned relation record that is not authorization.
+/// Its distinct domain and length make type confusion with
+/// [`AuthorizationJournal`] fail closed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VerificationEvidenceJournal([u8; Self::LEN]);
+
+impl VerificationEvidenceJournal {
+    pub const LEN: usize = 184;
+
+    pub fn as_bytes(&self) -> &[u8; Self::LEN] {
+        &self.0
+    }
+
+    pub fn into_bytes(self) -> [u8; Self::LEN] {
+        self.0
     }
 }
 
@@ -338,6 +399,37 @@ mod tests {
         assert_eq!(
             current.authorization_journal(&policy()),
             Err(BindingError::ChainStateNotVerified)
+        );
+    }
+
+    #[test]
+    fn verified_denial_evidence_cannot_alias_authorization() {
+        let evidence = verified([1, 0, 0])
+            .verification_evidence_journal(&policy())
+            .unwrap();
+        let bytes = evidence.as_bytes();
+        assert_eq!(bytes.len(), VerificationEvidenceJournal::LEN);
+        assert_ne!(bytes.len(), AuthorizationJournal::LEN);
+        assert_eq!(&bytes[0..8], b"BARKZKVE");
+        assert_eq!(&bytes[8..12], &1u32.to_be_bytes());
+        assert_eq!(&bytes[12..16], &1u32.to_be_bytes());
+        assert_eq!(&bytes[16..20], &0u32.to_be_bytes());
+        assert_eq!(&bytes[20..24], &0u32.to_be_bytes());
+        assert_eq!(&bytes[24..56], &[0x10; 32]);
+        assert_eq!(&bytes[56..88], &PROGRAM);
+        assert_eq!(&bytes[88..120], &STWO_POLICY);
+        assert_eq!(
+            &bytes[120..152],
+            &verified([1, 0, 0]).output().statement_digest()
+        );
+        assert_eq!(
+            &bytes[152..184],
+            &verified([1, 0, 0]).output().taproot_sighash()
+        );
+        assert_eq!(
+            verified([1, 0, 0])
+                .verification_evidence_journal(&VerificationPolicy::new([0x33; 32], STWO_POLICY)),
+            Err(BindingError::ProgramMismatch)
         );
     }
 

@@ -27,6 +27,9 @@ emitted.
 - A 32-byte Boundless journal that can be constructed only when the proof,
   program pin, policy pin, transaction relation, chain state and operator
   authorization all succeed.
+- A distinct 184-byte `BARKZKVE` journal that proves the STWO verification and
+  pinned relation output on denial. Its type and length cannot alias the
+  32-byte authorization journal.
 
 There is no mock verifier, development receipt, or caller-provided acceptance
 boolean.
@@ -67,13 +70,16 @@ adapter, calls upstream `verify_cairo`, checks the authenticated program hash
 and Bark statement digests, confirms that their `1,0,0` outputs cannot emit an
 authorization journal, and rejects compressed-stream and bincode trailers.
 
-The checked-in guest still stops at a deliberate compile guard. The repository
-now includes `../stwo-cairo-risc0-verifier-only.patch`, which gates host file
-utilities, JSON diagnostics, Rayon and Pedersen table materialization while
-leaving the real verifier and its relation bounds intact. The dedicated GitHub
-RV32 workflow applies that patch to the exact upstream commit and compiles the
-full guest with RISC Zero Rust 1.88.0.
+The checked-in guest still stops an unpatched direct Cargo build at a deliberate
+compile guard. The repository includes
+`../stwo-cairo-risc0-verifier-only.patch`, which gates host file utilities,
+JSON diagnostics, Rayon and Pedersen table materialization while leaving the
+real verifier and its relation bounds intact. The dedicated GitHub RV32
+workflow applies that patch to the exact upstream commit; its full compile with
+RISC Zero Rust 1.88.0 is green.
 
-The guard and zero policy pins remain until that cross-compile passes and both
-checked-in STWO proofs execute inside the guest. A compile success alone is not
-an operator authorization and does not create a receipt.
+Both proof artifacts independently reproduce the nonzero program commitment
+`4c75023e...714ef067` and policy commitment `626cd38f...71955314` now pinned in
+the guest. The next workflow gate executes both proofs and measures the ELF.
+A compile success or 184-byte denial journal is not operator authorization; the
+current `1,0,0` relation still cannot emit the 32-byte authorization journal.
