@@ -1,6 +1,73 @@
 #[cfg(target_os = "zkvm")]
 use risc0_zkvm::guest::env;
 
+// The RISC Zero guest target is RV32IM: it has one hart and intentionally has
+// no RISC-V A extension. LLVM therefore lowers atomics used by RISC Zero,
+// ark-relations, and foldhash to the compiler-rt ABI below. On this single-hart
+// target, a strongest-order compiler fence plus volatile memory access provides
+// the required observable behavior without weakening any STWO verification.
+#[cfg(target_os = "zkvm")]
+mod rv32im_atomic_abi {
+    use core::ptr::{read_volatile, write_volatile};
+    use core::sync::atomic::{compiler_fence, Ordering};
+
+    #[inline]
+    unsafe fn load<T: Copy>(ptr: *const T) -> T {
+        compiler_fence(Ordering::SeqCst);
+        let value = unsafe { read_volatile(ptr) };
+        compiler_fence(Ordering::SeqCst);
+        value
+    }
+
+    #[inline]
+    unsafe fn store<T>(ptr: *mut T, value: T) {
+        compiler_fence(Ordering::SeqCst);
+        unsafe { write_volatile(ptr, value) };
+        compiler_fence(Ordering::SeqCst);
+    }
+
+    #[no_mangle]
+    unsafe extern "C" fn __atomic_load_1(ptr: *const u8, _order: i32) -> u8 {
+        unsafe { load(ptr) }
+    }
+
+    #[no_mangle]
+    unsafe extern "C" fn __atomic_store_1(ptr: *mut u8, value: u8, _order: i32) {
+        unsafe { store(ptr, value) }
+    }
+
+    #[no_mangle]
+    unsafe extern "C" fn __atomic_load_4(ptr: *const u32, _order: i32) -> u32 {
+        unsafe { load(ptr) }
+    }
+
+    #[no_mangle]
+    unsafe extern "C" fn __atomic_store_4(ptr: *mut u32, value: u32, _order: i32) {
+        unsafe { store(ptr, value) }
+    }
+
+    // LLVM compiler-rt's size-specialized compare-exchange ABI omits the
+    // source-level `weak` argument and is permitted to implement a strong CAS.
+    #[no_mangle]
+    unsafe extern "C" fn __atomic_compare_exchange_1(
+        ptr: *mut u8,
+        expected: *mut u8,
+        desired: u8,
+        _success_order: i32,
+        _failure_order: i32,
+    ) -> bool {
+        let current = unsafe { load(ptr) };
+        let expected_value = unsafe { load(expected) };
+        if current == expected_value {
+            unsafe { store(ptr, desired) };
+            true
+        } else {
+            unsafe { store(expected, current) };
+            false
+        }
+    }
+}
+
 #[cfg(target_os = "zkvm")]
 fn main() {
     use bark_risc0_stwo_verifier::{upstream_stwo, BindingError, VerificationPolicy};
