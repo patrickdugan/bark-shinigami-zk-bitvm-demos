@@ -1,37 +1,25 @@
-use core::sha256::compute_sha256_byte_array;
-use shinigami_engine::flags;
-use shinigami_engine::transaction::{EngineInternalTransactionTrait, UTXO};
-use shinigami_tests::validate;
-use shinigami_utils::bytecode::hex_to_bytecode;
-
-// This program deliberately fails closed. It already invokes Shinigami over
-// the exact raw transaction and prevouts and computes the statement digest,
-// but `accepted` remains zero until the canonical BarkSpendEnvelopeV1 parser
-// is implemented in Cairo and proves that those execution inputs are the
-// fields committed by `statement_envelope`.
-//
-// Returning zero is a security feature: no STWO/RISC0/Boundless receipt built
-// from this intermediate relation can authorize the operator-take path.
-
-#[derive(Clone, Drop, Serde)]
-pub struct UtxoHintV1 {
-    pub amount: i64,
-    pub pubkey_script: ByteArray,
-    pub block_height: u32,
-}
+mod bip340;
+mod envelope;
+mod oracle_policy;
+mod transaction_policy;
+use bip340::verify_bound_schnorr;
+use envelope::{RoleEvidenceV1, decode};
+use garaga::signatures::schnorr::SchnorrSignatureWithHint;
+use oracle_policy::verify_virtual_cet;
+use shinigami_utils::hash::compute_sha256_byte_array;
+use transaction_policy::{u256_words, validate_and_sighash};
 
 #[derive(Drop, Serde)]
-pub struct BarkShinigamiInputV1 {
-    pub raw_transaction: ByteArray,
-    pub utxo_hints: Array<UtxoHintV1>,
-    pub flags: ByteArray,
-    pub txid: u256,
+pub struct BarkShinigamiInputV2 {
     pub statement_envelope: ByteArray,
+    pub signature_witnesses: Array<SchnorrSignatureWithHint>,
 }
 
 #[derive(Copy, Drop, Serde)]
-pub struct BarkShinigamiOutputV1 {
-    pub accepted: u32,
+pub struct BarkShinigamiOutputV3 {
+    pub transaction_relation_valid: u32,
+    pub chain_state_verified: u32,
+    pub operator_take_authorized: u32,
     pub statement_digest_0: u32,
     pub statement_digest_1: u32,
     pub statement_digest_2: u32,
@@ -40,42 +28,63 @@ pub struct BarkShinigamiOutputV1 {
     pub statement_digest_5: u32,
     pub statement_digest_6: u32,
     pub statement_digest_7: u32,
+    pub taproot_sighash_0: u32,
+    pub taproot_sighash_1: u32,
+    pub taproot_sighash_2: u32,
+    pub taproot_sighash_3: u32,
+    pub taproot_sighash_4: u32,
+    pub taproot_sighash_5: u32,
+    pub taproot_sighash_6: u32,
+    pub taproot_sighash_7: u32,
 }
 
 #[executable]
-fn main(mut input: BarkShinigamiInputV1) -> BarkShinigamiOutputV1 {
-    let script_flags = flags::parse_flags(input.flags);
-    let mut utxo_hints: Array<UTXO> = array![];
-    for hint in input.utxo_hints.span() {
-        utxo_hints.append(
-            UTXO {
-                amount: *hint.amount,
-                pubkey_script: hint.pubkey_script.clone(),
-                block_height: *hint.block_height,
-            },
-        );
-    };
-    let transaction = EngineInternalTransactionTrait::deserialize(
-        input.raw_transaction, input.txid, utxo_hints,
+fn main(input: BarkShinigamiInputV2) -> BarkShinigamiOutputV3 {
+    let BarkShinigamiInputV2 { statement_envelope, mut signature_witnesses } = input;
+    let envelope = decode(@statement_envelope);
+    let validated_spend = validate_and_sighash(@envelope);
+    assert(signature_witnesses.len() >= 1, 'owner witness missing');
+    let owner_witness = signature_witnesses.pop_front().unwrap();
+    verify_bound_schnorr(
+        owner_witness,
+        @validated_spend.owner_signature,
+        @validated_spend.owner_public_key,
+        validated_spend.taproot_sighash,
     );
-    let shinigami_result = validate::validate_transaction(@transaction, script_flags);
+    match envelope.evidence {
+        RoleEvidenceV1::OwnerExit(owner_evidence) => {
+            assert(
+                owner_evidence.owner_xonly == validated_spend.owner_public_key, 'owner mismatch',
+            );
+            assert(owner_evidence.csv_delay == 2016, 'owner csv mismatch');
+            assert(signature_witnesses.is_empty(), 'unexpected signature witnesses');
+        },
+        RoleEvidenceV1::VirtualCet(cet_evidence) => {
+            assert(signature_witnesses.len() == 2, 'oracle witnesses missing');
+            let announcement_witness = signature_witnesses.pop_front().unwrap();
+            let attestation_witness = signature_witnesses.pop_front().unwrap();
+            verify_virtual_cet(
+                cet_evidence, @validated_spend.outputs, announcement_witness, attestation_witness,
+            );
+        },
+    }
+
     // BIP340-style tagged hash: SHA256(SHA256(tag) || SHA256(tag) || msg).
     // da7434...876c is SHA256("BarkZkBitvm/StatementV1").
-    let mut tagged_preimage = hex_to_bytecode(
-        @"0xda743480fe6899b1444382262314a714ca29fb9c204f57b82e3e840283c3876cda743480fe6899b1444382262314a714ca29fb9c204f57b82e3e840283c3876c",
-    );
-    tagged_preimage.append(@input.statement_envelope);
+    let mut tagged_preimage: ByteArray = "";
+    append_tag_hash(ref tagged_preimage);
+    append_tag_hash(ref tagged_preimage);
+    tagged_preimage.append(@statement_envelope);
     let [d0, d1, d2, d3, d4, d5, d6, d7] = compute_sha256_byte_array(@tagged_preimage);
+    let [s0, s1, s2, s3, s4, s5, s6, s7] = u256_words(validated_spend.taproot_sighash);
 
-    // Exercise the real engine in both branches while refusing authorization
-    // until the envelope-to-engine field linkage exists inside this program.
-    let accepted = match shinigami_result {
-        Result::Ok(_) => 0,
-        Result::Err(_) => 0,
-    };
-
-    BarkShinigamiOutputV1 {
-        accepted,
+    // Reaching this output means the signed transaction relation succeeded.
+    // Heights in the envelope are not authenticated Bitcoin chain facts, so
+    // chain-state verification and operator authorization remain fail-closed.
+    BarkShinigamiOutputV3 {
+        transaction_relation_valid: 1,
+        chain_state_verified: 0,
+        operator_take_authorized: 0,
         statement_digest_0: d0,
         statement_digest_1: d1,
         statement_digest_2: d2,
@@ -84,5 +93,18 @@ fn main(mut input: BarkShinigamiInputV1) -> BarkShinigamiOutputV1 {
         statement_digest_5: d5,
         statement_digest_6: d6,
         statement_digest_7: d7,
+        taproot_sighash_0: s0,
+        taproot_sighash_1: s1,
+        taproot_sighash_2: s2,
+        taproot_sighash_3: s3,
+        taproot_sighash_4: s4,
+        taproot_sighash_5: s5,
+        taproot_sighash_6: s6,
+        taproot_sighash_7: s7,
     }
+}
+
+fn append_tag_hash(ref output: ByteArray) {
+    output.append_word(0xda743480fe6899b1444382262314a714ca29fb9c204f57b82e3e840283c387, 31);
+    output.append_byte(0x6c);
 }

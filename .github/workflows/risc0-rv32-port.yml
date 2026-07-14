@@ -1,0 +1,392 @@
+name: RISC Zero RV32 verifier port
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/stwo-shinigami-enforcement
+    paths:
+      - .github/workflows/risc0-rv32-port.yml
+      - RISC0_RV32_PORT_AUDIT.md
+      - stwo-cairo-risc0-verifier-only.patch
+      - stwo-risc0-verifier-only.patch
+      - risc0-stwo-verifier/**
+      - risc0-stwo-executor/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: risc0-rv32-port-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile-real-verifier-guest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
+      STWO_CAIRO_COMMIT: b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1
+      STWO_COMMIT: 93dd93e04f42edba48d8984858c8c39ce9f30c8c
+      STWO_CAIRO_PATCH_SHA256: 106255ba721391977be95efe9bafdd257db81f0fe550f1a35c88d07632d5b6e1
+      STWO_PATCH_SHA256: d0f0e7a9ca5df0b92ffe0f1b2c0c40e25f6fc2a39f2dc372eae893a39fd4f12e
+      # rzup takes the Rust version; its backing GitHub release is r0.1.88.0.
+      RISC0_RUST_VERSION: 1.88.0
+
+    steps:
+      - name: Check out exact showcase commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install the SDK-matched RISC Zero Rust toolchain
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl --proto '=https' --tlsv1.2 --retry 5 --retry-all-errors \
+            --retry-delay 3 -LsSf https://risczero.com/install | bash
+          echo "${HOME}/.risc0/bin" >> "${GITHUB_PATH}"
+          "${HOME}/.risc0/bin/rzup" install rust "${RISC0_RUST_VERSION}"
+          rustc +risc0 --version | tee /tmp/risc0-rust-version.txt
+          grep -F 'rustc 1.88.0' /tmp/risc0-rust-version.txt
+
+      - name: Apply only the verifier packaging patches
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "${STWO_CAIRO_PATCH_SHA256}  stwo-cairo-risc0-verifier-only.patch" | sha256sum --check
+          echo "${STWO_PATCH_SHA256}  stwo-risc0-verifier-only.patch" | sha256sum --check
+
+          git clone --filter=blob:none https://github.com/starkware-libs/stwo-cairo.git "${RUNNER_TEMP}/stwo-cairo"
+          git -C "${RUNNER_TEMP}/stwo-cairo" checkout --detach "${STWO_CAIRO_COMMIT}"
+          git -C "${RUNNER_TEMP}/stwo-cairo" apply --check "${GITHUB_WORKSPACE}/stwo-cairo-risc0-verifier-only.patch"
+          git -C "${RUNNER_TEMP}/stwo-cairo" apply "${GITHUB_WORKSPACE}/stwo-cairo-risc0-verifier-only.patch"
+          git -C "${RUNNER_TEMP}/stwo-cairo" diff --check
+
+          actual="$(git -C "${RUNNER_TEMP}/stwo-cairo" diff --name-only)"
+          expected=$'stwo_cairo_prover/Cargo.lock\nstwo_cairo_prover/crates/cairo-air/Cargo.toml\nstwo_cairo_prover/crates/cairo-air/src/utils.rs\nstwo_cairo_prover/crates/cairo-air/src/verifier.rs\nstwo_cairo_prover/crates/common/Cargo.toml\nstwo_cairo_prover/crates/common/src/preprocessed_columns/mod.rs\nstwo_cairo_prover/crates/common/src/preprocessed_columns/pedersen.rs'
+          test "${actual}" = "${expected}"
+          grep -F '.filter(|(_, &uses)| uses >= PRIME.into())' \
+            "${RUNNER_TEMP}/stwo-cairo/stwo_cairo_prover/crates/cairo-air/src/verifier.rs"
+
+          git clone --filter=blob:none https://github.com/starkware-libs/stwo.git "${RUNNER_TEMP}/stwo"
+          git -C "${RUNNER_TEMP}/stwo" checkout --detach "${STWO_COMMIT}"
+          git -C "${RUNNER_TEMP}/stwo" apply --check "${GITHUB_WORKSPACE}/stwo-risc0-verifier-only.patch"
+          git -C "${RUNNER_TEMP}/stwo" apply "${GITHUB_WORKSPACE}/stwo-risc0-verifier-only.patch"
+          git -C "${RUNNER_TEMP}/stwo" diff --check
+
+          actual="$(git -C "${RUNNER_TEMP}/stwo" diff --name-only)"
+          expected=$'crates/constraint-framework/Cargo.toml\ncrates/stwo/Cargo.toml\ncrates/stwo/src/core/verifier.rs'
+          test "${actual}" = "${expected}"
+          grep -F 'pub fn verify_ex<MC: MerkleChannel>' \
+            "${RUNNER_TEMP}/stwo/crates/stwo/src/core/verifier.rs"
+
+      - name: Prepare an isolated full-guest compile probe
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp -R risc0-stwo-verifier "${RUNNER_TEMP}/risc0-stwo-verifier-port"
+          export PORT_MANIFEST="${RUNNER_TEMP}/risc0-stwo-verifier-port/Cargo.toml"
+          export PORT_LIB="${RUNNER_TEMP}/risc0-stwo-verifier-port/src/lib.rs"
+          export CAIRO_AIR="${RUNNER_TEMP}/stwo-cairo/stwo_cairo_prover/crates/cairo-air"
+          export CAIRO_COMMON="${RUNNER_TEMP}/stwo-cairo/stwo_cairo_prover/crates/common"
+          export STWO_ROOT="${RUNNER_TEMP}/stwo"
+          export STWO_CAIRO_MANIFEST="${RUNNER_TEMP}/stwo-cairo/stwo_cairo_prover/Cargo.toml"
+
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          manifest_path = Path(os.environ["PORT_MANIFEST"])
+          manifest = manifest_path.read_text()
+          old_air = 'cairo-air = { git = "https://github.com/starkware-libs/stwo-cairo.git", rev = "b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1", default-features = false, optional = true }'
+          new_air = f'cairo-air = {{ path = "{os.environ["CAIRO_AIR"]}", default-features = false, features = ["verifier"], optional = true }}'
+          old_common = 'stwo-cairo-common = { git = "https://github.com/starkware-libs/stwo-cairo.git", rev = "b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1", default-features = false, optional = true }'
+          new_common = f'stwo-cairo-common = {{ path = "{os.environ["CAIRO_COMMON"]}", default-features = false, optional = true }}'
+          old_stwo = 'stwo = { git = "https://github.com/starkware-libs/stwo.git", rev = "93dd93e0", optional = true }'
+          new_stwo = f'stwo = {{ path = "{os.environ["STWO_ROOT"]}/crates/stwo", optional = true }}'
+          assert manifest.count(old_air) == 1
+          assert manifest.count(old_common) == 1
+          assert manifest.count(old_stwo) == 1
+          manifest_path.write_text(
+              manifest.replace(old_air, new_air)
+              .replace(old_common, new_common)
+              .replace(old_stwo, new_stwo)
+          )
+
+          stwo_cairo_manifest_path = Path(os.environ["STWO_CAIRO_MANIFEST"])
+          stwo_cairo_manifest = stwo_cairo_manifest_path.read_text()
+          old_stwo_workspace = 'stwo = { git = "https://github.com/starkware-libs/stwo", rev = "93dd93e0" }'
+          new_stwo_workspace = f'stwo = {{ path = "{os.environ["STWO_ROOT"]}/crates/stwo" }}'
+          old_framework_workspace = 'stwo-constraint-framework = { git = "https://github.com/starkware-libs/stwo", rev = "93dd93e0" }'
+          new_framework_workspace = f'stwo-constraint-framework = {{ path = "{os.environ["STWO_ROOT"]}/crates/constraint-framework" }}'
+          assert stwo_cairo_manifest.count(old_stwo_workspace) == 1
+          assert stwo_cairo_manifest.count(old_framework_workspace) == 1
+          stwo_cairo_manifest_path.write_text(
+              stwo_cairo_manifest.replace(old_stwo_workspace, new_stwo_workspace)
+              .replace(old_framework_workspace, new_framework_workspace)
+          )
+
+          lib_path = Path(os.environ["PORT_LIB"])
+          lib = lib_path.read_text()
+          guard = '''#[cfg(all(feature = "upstream-stwo", target_os = "zkvm"))]
+          compile_error!(
+              "pinned cairo-air b1acf8b is not RISC Zero RV32-compatible: port its verifier-only claim/AIR modules before building this guest"
+          );
+          '''
+          assert lib.count(guard) == 1
+          lib_path.write_text(lib.replace(guard, ""))
+          PY
+
+          cd "$(dirname "${PORT_MANIFEST}")"
+          # The STWO/Cairo verifier needs the zkVM's partial std. With that
+          # feature enabled, RISC Zero supplies the entrypoint and panic
+          # handler; using guest::entry! would select its no_std bootstrap too.
+          grep -F '"risc0-zkvm/std"' "${PORT_MANIFEST}"
+          ! grep -F 'guest::entry!' src/bin/bark_stwo_guest.rs
+          cargo +risc0 update \
+            --manifest-path "${PORT_MANIFEST}" \
+            --package enum-ordinalize \
+            --precise 4.3.2
+          cargo +risc0 update \
+            --manifest-path "${PORT_MANIFEST}" \
+            --package enum-ordinalize-derive \
+            --precise 4.3.2
+
+      - name: Reject host-only verifier dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "${RUNNER_TEMP}/risc0-stwo-verifier-port"
+          cargo +risc0 tree \
+            --manifest-path "${RUNNER_TEMP}/risc0-stwo-verifier-port/Cargo.toml" \
+            --features risc0-guest \
+            --target riscv32im-risc0-zkvm-elf \
+            --edges normal > "${RUNNER_TEMP}/rv32-tree.txt"
+          grep -F 'enum-ordinalize v4.3.2' "${RUNNER_TEMP}/rv32-tree.txt"
+          grep -F 'enum-ordinalize-derive v4.3.2' "${RUNNER_TEMP}/rv32-tree.txt"
+          # RISC Zero itself uses tracing in the zkVM/Groth16 stack. Reject the
+          # verifier-unneeded STWO cache and Cairo host utilities specifically.
+          ! grep -E '(^| )(sonic-rs|clap|serde_json|rayon|dashmap) v' "${RUNNER_TEMP}/rv32-tree.txt"
+
+      - name: Build the real STWO verifier call into an RV32 ELF
+        shell: bash
+        run: |
+          set -uxo pipefail
+          cd "${RUNNER_TEMP}/risc0-stwo-verifier-port"
+          output="${RUNNER_TEMP}/risc0-stwo-evidence"
+          mkdir -p "${output}"
+          export RUSTFLAGS='--cfg getrandom_backend="custom" -C link-arg=-Triscv32im-risc0-zkvm-elf.ld'
+          set +e
+          cargo +risc0 build \
+            --locked \
+            --release \
+            --manifest-path "${RUNNER_TEMP}/risc0-stwo-verifier-port/Cargo.toml" \
+            --features risc0-guest \
+            --target riscv32im-risc0-zkvm-elf \
+            --bin bark-stwo-guest 2>&1 | tee "${output}/rv32-build.log"
+          status="${PIPESTATUS[0]}"
+          set -e
+
+          if [[ "${status}" -ne 0 ]]; then
+            export RV32_BUILD_LOG="${output}/rv32-build.log"
+            {
+              echo '## RV32 compiler diagnostic'
+              echo '```text'
+              tail -n 200 "${RV32_BUILD_LOG}"
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+            python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          lines = Path(os.environ["RV32_BUILD_LOG"]).read_text(errors="replace").splitlines()
+          markers = (
+              "rust-lld: error:",
+              "error: linking with",
+              "error: could not compile",
+              "undefined symbol",
+              "__atomic_",
+              "overflowed by",
+              "will not fit in region",
+          )
+          selected = [
+              line for line in lines
+              if any(marker in line for marker in markers)
+              and not ('= note: "rust-lld"' in line and len(line) > 2000)
+          ]
+          diagnostic = "\n".join((selected or lines[-40:])[-40:])
+          escaped = diagnostic.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=RV32 compiler diagnostic::{escaped}")
+          PY
+            exit "${status}"
+          fi
+
+          elf="${RUNNER_TEMP}/risc0-stwo-verifier-port/target/riscv32im-risc0-zkvm-elf/release/bark-stwo-guest"
+          readelf -h -l "${elf}" | tee "${output}/rv32-elf-layout.txt"
+          RV32_ELF="${elf}" python - <<'PY'
+          import os
+          import struct
+          from pathlib import Path
+
+          elf = Path(os.environ["RV32_ELF"]).read_bytes()
+          if elf[:6] != b"\x7fELF\x01\x01":
+              raise SystemExit("guest is not a little-endian ELF32 binary")
+
+          entry, phoff = struct.unpack_from("<II", elf, 24)
+          phentsize, phnum = struct.unpack_from("<HH", elf, 42)
+          executable_loads = []
+          for index in range(phnum):
+              header = struct.unpack_from("<IIIIIIII", elf, phoff + index * phentsize)
+              kind, _, vaddr, _, file_size, mem_size, flags, _ = header
+              if kind == 1 and flags & 1:
+                  executable_loads.append((vaddr, file_size, mem_size))
+
+          expected_text = 0x00200800
+          matching = [
+              segment
+              for segment in executable_loads
+              if segment[0] == expected_text
+              and segment[0] <= entry < segment[0] + segment[2]
+          ]
+          if not matching:
+              raise SystemExit(
+                  f"entry 0x{entry:08x} is not inside an executable PT_LOAD "
+                  f"at RISC Zero TEXT_START 0x{expected_text:08x}: {executable_loads}"
+              )
+          print(f"validated RISC Zero guest entry 0x{entry:08x} in {matching[0]}")
+          PY
+
+      - name: Build the pinned local zkVM executor
+        shell: bash
+        run: |
+          set -uxo pipefail
+          output="${RUNNER_TEMP}/risc0-stwo-evidence"
+          mkdir -p "${output}"
+          python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          packages = {
+              package["name"]: package["version"]
+              for package in tomllib.loads(
+                  Path("risc0-stwo-executor/Cargo.lock").read_text()
+              )["package"]
+              if package["name"].startswith("risc0-")
+          }
+          expected = {
+              "risc0-binfmt": "3.0.3",
+              "risc0-build": "3.0.4",
+              "risc0-build-kernel": "2.0.1",
+              "risc0-circuit-keccak": "4.0.3",
+              "risc0-circuit-keccak-sys": "4.0.1",
+              "risc0-circuit-recursion": "4.0.3",
+              "risc0-circuit-recursion-sys": "4.0.1",
+              "risc0-circuit-rv32im": "4.0.3",
+              "risc0-circuit-rv32im-sys": "4.0.1",
+              "risc0-core": "3.0.0",
+              "risc0-groth16": "3.0.3",
+              "risc0-sys": "1.5.0",
+              "risc0-zkos-v1compat": "2.2.1",
+              "risc0-zkp": "3.0.3",
+              "risc0-zkvm": "3.0.4",
+              "risc0-zkvm-platform": "2.2.1",
+          }
+          assert packages == expected, (packages, expected)
+          PY
+          set +e
+          cargo build \
+            --locked \
+            --release \
+            --features local \
+            --manifest-path risc0-stwo-executor/Cargo.toml \
+            2>&1 | tee "${output}/host-build.log"
+          status="${PIPESTATUS[0]}"
+          set -e
+          if [[ "${status}" -ne 0 ]]; then
+            export RISC0_HOST_BUILD_LOG="${output}/host-build.log"
+            python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          lines = Path(os.environ["RISC0_HOST_BUILD_LOG"]).read_text(errors="replace").splitlines()
+          diagnostic = "\n".join(lines[-120:])
+          escaped = diagnostic.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=RISC Zero host build diagnostic::{escaped}")
+          PY
+            exit "${status}"
+          fi
+          rm "${output}/host-build.log"
+
+      - name: Execute both real STWO proofs inside the zkVM
+        shell: bash
+        run: |
+          set -uxo pipefail
+          elf="${RUNNER_TEMP}/risc0-stwo-verifier-port/target/riscv32im-risc0-zkvm-elf/release/bark-stwo-guest"
+          executor="${GITHUB_WORKSPACE}/risc0-stwo-executor/target/release/bark-risc0-stwo-executor"
+          output="${RUNNER_TEMP}/risc0-stwo-evidence"
+          test -x "${elf}"
+          test -x "${executor}"
+          mkdir -p "${output}"
+
+          set +e
+          RISC0_PROGRAM_BINARY_OUT="${output}/bark-stwo-guest.program.bin" \
+          RISC0_EXECUTOR=local "${executor}" \
+            "${elf}" \
+            proof-evidence/owner_exit_allow.stwo.bin \
+            34962f16168196bd39f9b516c9ef5afb8da4bfd70638d0fd3767defc266cb9be \
+            a800a956e45e99a985d853fa3dc8624a616d217ab86e612ffdb8495761d2bb5a \
+            > "${output}/owner_exit_allow.execution.json" \
+            2> "${output}/owner_exit_allow.execution.log"
+          owner_status="$?"
+          RISC0_EXECUTOR=local "${executor}" \
+            "${elf}" \
+            proof-evidence/virtual_cet_guard.stwo.bin \
+            672e302333c83d08a943dc21873f9cb80d0057c3a9869cda38e9f74290361245 \
+            1631855d0955b9e6cc7a58d6828135ce55b085a2039cd8455420b3957e4ffdeb \
+            > "${output}/virtual_cet_guard.execution.json" \
+            2> "${output}/virtual_cet_guard.execution.log"
+          cet_status="$?"
+          set -e
+
+          if [[ "${owner_status}" -ne 0 || "${cet_status}" -ne 0 ]]; then
+            export RV32_EXECUTION_LOG="${output}/combined.log"
+            cat "${output}"/*.execution.log > "${RV32_EXECUTION_LOG}"
+            {
+              echo '## RV32 execution diagnostic'
+              echo '```text'
+              tail -n 200 "${RV32_EXECUTION_LOG}"
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+            python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          lines = Path(os.environ["RV32_EXECUTION_LOG"]).read_text(errors="replace").splitlines()
+          diagnostic = "\n".join(lines[-120:])
+          escaped = diagnostic.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=RV32 execution diagnostic::{escaped}")
+          PY
+            exit 1
+          fi
+
+          sha256sum \
+            "${elf}" \
+            "${output}/bark-stwo-guest.program.bin" \
+            "${output}"/*.execution.json \
+            > "${output}/SHA256SUMS"
+          cp "${elf}" "${output}/bark-stwo-guest.user.elf"
+          {
+            echo '## Verified zkVM denial evidence'
+            echo '```json'
+            cat "${output}"/*.execution.json
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload the measured ELF and execution evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: risc0-stwo-execution-${{ github.sha }}
+          path: ${{ runner.temp }}/risc0-stwo-evidence/**
+          if-no-files-found: warn
+          retention-days: 14

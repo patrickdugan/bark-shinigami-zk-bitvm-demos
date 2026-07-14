@@ -1,4 +1,5 @@
 pub mod bitvm2_manifest;
+pub mod bitvm2_proof;
 pub mod bitvmx_outer_feasibility;
 pub mod boundless;
 pub mod demo;

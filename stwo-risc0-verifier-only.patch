@@ -1,0 +1,96 @@
+diff --git a/crates/constraint-framework/Cargo.toml b/crates/constraint-framework/Cargo.toml
+index 954eea2c..6361dec0 100644
+--- a/crates/constraint-framework/Cargo.toml
++++ b/crates/constraint-framework/Cargo.toml
+@@ -7,15 +7,15 @@ description = "Constraint framework for building AIR constraints with STWO"
+ 
+ [features]
+ default = ["std"]
+-std = ["stwo/std", "itertools/use_std", "tracing/std", "num-traits/std", "stwo-std-shims/std"]
++std = ["stwo/std", "itertools/use_std", "num-traits/std", "stwo-std-shims/std"]
+ parallel = ["dep:rayon", "stwo/parallel"]
+-prover = ["stwo/prover", "std"]
++prover = ["stwo/prover", "std", "dep:tracing", "tracing/std"]
+ 
+ [dependencies]
+ rayon = { workspace = true, optional = true }
+ num-traits.workspace = true
+ itertools.workspace = true
+-tracing.workspace = true
++tracing = { workspace = true, optional = true }
+ stwo = { path = "../stwo", version = "2.2.0", default-features = false }
+ rand.workspace = true
+ hashbrown.workspace = true
+diff --git a/crates/stwo/Cargo.toml b/crates/stwo/Cargo.toml
+index 621fc742..4b265acf 100644
+--- a/crates/stwo/Cargo.toml
++++ b/crates/stwo/Cargo.toml
+@@ -16,15 +16,13 @@ std = [
+     "num-traits/std",
+     "starknet-crypto/std",
+     "thiserror/std",
+-    "tracing/std",
+     "serde/std",
+-    "tracing-subscriber/std",
+     "stwo-std-shims/std",
+ ]
+-prover = ["std", "tracing/attributes"]
++prover = ["std", "dep:dashmap", "dep:tracing", "tracing/std", "tracing/attributes"]
+ parallel = ["rayon", "indexmap/rayon"]
+ slow-tests = []
+-tracing = []
++tracing = ["dep:tracing", "dep:tracing-subscriber", "tracing/std", "tracing-subscriber/std"]
+ # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+ 
+ [dependencies]
+@@ -47,13 +45,13 @@ starknet-ff = { version = "0.3.7", default-features = false, features = [
+     "serde",
+ ] }
+ thiserror.workspace = true
+-tracing.workspace = true
++tracing = { workspace = true, optional = true }
+ rayon = { workspace = true, optional = true }
+ serde.workspace = true
+-tracing-subscriber.workspace = true
++tracing-subscriber = { workspace = true, optional = true }
+ hashbrown.workspace = true
+ stwo-std-shims = { version = "1.0.0", default-features = false }
+-dashmap = "6.1.0"
++dashmap = { version = "6.1.0", optional = true }
+ 
+ [dev-dependencies]
+ aligned = "0.4.2"
+diff --git a/crates/stwo/src/core/verifier.rs b/crates/stwo/src/core/verifier.rs
+index 98209579..db72eb23 100644
+--- a/crates/stwo/src/core/verifier.rs
++++ b/crates/stwo/src/core/verifier.rs
+@@ -49,6 +49,7 @@ pub fn verify_ex<MC: MerkleChannel>(
+     };
+     let split_composition_log_degree_bound =
+         components.composition_log_degree_bound() - COMPOSITION_LOG_SPLIT;
++    #[cfg(feature = "tracing")]
+     tracing::info!(
+         "Split composition polynomial log degree bound: {}",
+         split_composition_log_degree_bound
+@@ -95,12 +96,15 @@ pub fn verify_ex<MC: MerkleChannel>(
+     // Add the composition polynomial mask points.
+     sample_points.push(vec![vec![oods_point]; 2 * SECURE_EXTENSION_DEGREE]);
+ 
+-    let sample_points_by_column = sample_points.as_cols_ref().flatten();
+-    tracing::info!("Sampling {} columns.", sample_points_by_column.len());
+-    tracing::info!(
+-        "Total sample points: {}.",
+-        sample_points_by_column.into_iter().flatten().count()
+-    );
++    #[cfg(feature = "tracing")]
++    {
++        let sample_points_by_column = sample_points.as_cols_ref().flatten();
++        tracing::info!("Sampling {} columns.", sample_points_by_column.len());
++        tracing::info!(
++            "Total sample points: {}.",
++            sample_points_by_column.into_iter().flatten().count()
++        );
++    }
+ 
+     let composition_oods_eval = proof
+         .extract_composition_oods_eval(oods_point, max_log_degree_bound)

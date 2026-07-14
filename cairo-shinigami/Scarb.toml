@@ -6,9 +6,9 @@ cairo-version = "2.18.0"
 
 [dependencies]
 cairo_execute = "2.18.0"
-shinigami_engine = { git = "https://github.com/starkware-bitcoin/shinigami.git", rev = "7e8c05d60b4bd7ae91ddc18a42e8e13090286f0c" }
-shinigami_tests = { git = "https://github.com/starkware-bitcoin/shinigami.git", rev = "7e8c05d60b4bd7ae91ddc18a42e8e13090286f0c" }
-shinigami_utils = { git = "https://github.com/starkware-bitcoin/shinigami.git", rev = "7e8c05d60b4bd7ae91ddc18a42e8e13090286f0c" }
+shinigami_engine = { git = "https://github.com/patrickdugan/shinigami.git", rev = "565d7c7375bd090047137da702b2bfdcd48ec58d" }
+shinigami_utils = { git = "https://github.com/patrickdugan/shinigami.git", rev = "565d7c7375bd090047137da702b2bfdcd48ec58d" }
+garaga = { git = "https://github.com/keep-starknet-strange/garaga.git", rev = "0e986ba5133c16a30ac86a7cd07c9551787d0e91" }
 
 [cairo]
 sierra-replace-ids = true

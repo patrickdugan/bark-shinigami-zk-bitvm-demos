@@ -1,0 +1,22 @@
+[package]
+name = "bark-risc0-stwo-executor"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+resolver = "2"
+
+[features]
+default = ["local"]
+local = ["risc0-zkvm/prove"]
+
+[dependencies]
+anyhow = "=1.0.103"
+# Keep the host build helper on the same patch release as the zkVM SDK. The
+# checked-in lock and CI gate also match every RISC Zero crate in v3.0.4's
+# official workspace lock; later semver-compatible circuit crates changed ABI.
+risc0-build = "=3.0.4"
+risc0-binfmt = "=3.0.3"
+risc0-zkos-v1compat = "=2.2.1"
+risc0-zkvm = { version = "=3.0.4", default-features = false, features = ["client"] }

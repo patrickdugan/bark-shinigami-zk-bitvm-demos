@@ -1,0 +1,86 @@
+name: Test showcase
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/stwo-shinigami-enforcement
+    paths:
+      - .github/workflows/test-showcase.yml
+      - Cargo.lock
+      - Cargo.toml
+      - src/**
+      - tests/**
+      - proof-evidence/**
+      - risc0-stwo-verifier/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-showcase-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: 0
+      RUST_BACKTRACE: 1
+
+    steps:
+      - name: Check out exact showcase commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Verify checked-in proof evidence
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd proof-evidence
+          sha256sum --check SHA256SUMS.txt
+
+      - name: Format and test every Rust target
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rustc --version
+          cargo --version
+          cargo fmt --check
+          cargo test --locked --all-targets
+          cargo test --locked --manifest-path risc0-stwo-verifier/Cargo.toml
+          cargo test --locked --manifest-path risc0-stwo-verifier/Cargo.toml --no-default-features
+          cargo check --locked --manifest-path risc0-stwo-verifier/Cargo.toml --no-default-features
+
+      - name: Assert all three fail-closed receipt states
+        shell: bash
+        run: |
+          set -euxo pipefail
+          owner="$(cargo run --locked --quiet --bin owner_exit_allow)"
+          challenge="$(cargo run --locked --quiet --bin owner_exit_challenge)"
+          cet="$(cargo run --locked --quiet --bin virtual_cet_guard)"
+
+          test "$(jq -r '.host_preflight.exact_spend_valid' <<<"${owner}")" = true
+          test "$(jq -r '.proof_pipeline.reference_fixture.status' <<<"${owner}")" = verified_fixed_fixture
+          test "$(jq -r '.host_preflight.exact_spend_valid' <<<"${challenge}")" = false
+          test "$(jq -r '.proof_pipeline.reference_fixture.status' <<<"${challenge}")" = rejected_before_proof
+          test "$(jq -r '.host_preflight.exact_spend_valid' <<<"${cet}")" = true
+          test "$(jq -r '.proof_pipeline.reference_fixture.status' <<<"${cet}")" = verified_fixed_fixture
+
+          for receipt in "${owner}" "${challenge}" "${cet}"; do
+            test "$(jq -r '.proof_pipeline.current_instance_stwo_proof' <<<"${receipt}")" = not_generated_for_fresh_nonce
+            test "$(jq -r '.bitvm_enforcement.status' <<<"${receipt}")" = not_enforced
+            test "$(jq -r '.bitvm_enforcement.operator_take_authorized' <<<"${receipt}")" = false
+            test "$(jq -r '.security_boundary.broadcast' <<<"${receipt}")" = false
+            test "$(jq -r '.security_boundary.funded' <<<"${receipt}")" = false
+          done
+
+      - name: Reverify proofs and run the native STWO adversarial boundary
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rustup toolchain install nightly-2025-06-23 --profile minimal
+          cargo +nightly-2025-06-23 test \
+            --locked \
+            --manifest-path risc0-stwo-verifier/Cargo.toml \
+            --features upstream-stwo

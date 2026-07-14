@@ -2,11 +2,15 @@ fixtures/*.json text eol=lf
 evidence/**/*.json text eol=lf
 cairo/** text eol=lf
 cairo-shinigami/** text eol=lf
+proof-inputs/*.json text eol=lf
+proof-evidence/*.bin binary
+proof-evidence/*.json text eol=lf
+proof-evidence/*.txt text eol=lf
 *.rs text eol=lf
 *.toml text eol=lf
 *.lock text eol=lf
 *.gitignore text eol=lf
 *.js text eol=lf
 *.ps1 text eol=crlf
-*.patch text eol=lf
+*.patch text eol=lf whitespace=-blank-at-eol
 *.md text eol=lf

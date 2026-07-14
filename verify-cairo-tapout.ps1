@@ -11,24 +11,25 @@ New-Item -ItemType Directory -Force -Path $CacheDir, $TargetDir | Out-Null
 
 Push-Location (Join-Path $PSScriptRoot 'cairo-shinigami')
 try {
-    $output = (& $Scarb build 2>&1 | Out-String)
-    $status = $LASTEXITCODE
+    & $Scarb fmt --check
+    if ($LASTEXITCODE -ne 0) { throw 'Cairo formatting gate failed' }
+    & $Scarb build
+    if ($LASTEXITCODE -ne 0) { throw 'STWO-compatible Cairo executable build failed' }
 } finally {
     Pop-Location
 }
 
-if ($status -eq 0) {
-    throw 'Cairo executable unexpectedly built; review the syscall gate before enabling any proof'
-}
-if ($output -notmatch 'sha256_process_block_syscall' -or
-    $output -notmatch 'Syscalls are not supported') {
-    throw "Cairo failed for an unreviewed reason:`n$output"
+$executable = Join-Path $TargetDir 'dev\bark_shinigami_relation.executable.json'
+if (-not (Test-Path -LiteralPath $executable)) {
+    throw "Expected Cairo executable was not produced: $executable"
 }
 
 [pscustomobject]@{
-    schema = 'bark-shinigami-cairo-tapout-v1'
+    schema = 'bark-shinigami-cairo-build-v2'
     gate = 'stwo-cairo-executable'
-    status = 'blocked'
-    reason = 'Shinigami SHA-256 lowers to sha256_process_block_syscall, which Cairo executables reject'
+    status = 'ready_for_proving'
+    executable = $executable
+    executableSha256 = (Get-FileHash $executable -Algorithm SHA256).Hash.ToLowerInvariant()
     operatorTakeAuthorized = $false
+    nextGate = 'verified STWO proof plus recursive outer proof and relay-tested BitVM graph'
 } | ConvertTo-Json

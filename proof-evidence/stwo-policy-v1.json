@@ -1,0 +1,18 @@
+{
+  "schema": "StwoPolicyV1",
+  "channel": "blake2s",
+  "channel_salt": 0,
+  "pcs_pow_bits": 26,
+  "interaction_pow_bits": 24,
+  "fri_log_blowup_factor": 1,
+  "fri_queries": 70,
+  "fri_last_layer_degree_log": 0,
+  "fri_fold_step": 1,
+  "lifting_log_size": null,
+  "preprocessed_trace": "canonical",
+  "canonical_bytes_hex": "011a1801460001ff010100",
+  "tag": "BarkZkBitvm/StwoPolicyV1",
+  "digest": "cc48a057589ddbcf51c8458db65640609f21dac3afa485f717089806567dbece",
+  "stwo_cairo_commit": "b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1",
+  "stwo_commit": "93dd93e0"
+}

@@ -8,7 +8,7 @@ The replacement pipeline is:
 
 ```text
 BarkSpendEnvelopeV1
-  -> Cairo executes Shinigami and emits accepted + statement digest
+  -> Cairo executes Shinigami and emits relation-valid + fail-closed chain/auth flags + statement digest
   -> STWO under exact StwoPolicyV1
   -> RISC Zero guest verifies program, output, policy, and STWO proof
   -> 32-byte statement-digest journal
@@ -16,11 +16,15 @@ BarkSpendEnvelopeV1
   -> BitVM2 or BitVMX operator-bond dispute
 ```
 
-The checked-in `cairo-shinigami` program is intentionally incomplete and emits
-`accepted = 0`. It also hits the reviewed `sha256_process_block_syscall` build
-tap-out because Cairo executables do not support syscalls. Run
-`verify-cairo-tapout.ps1` to reproduce that exact failure. A software SHA-256
-port and the complete envelope parser are prerequisites for a positive proof.
+The checked-in `cairo-shinigami` program now builds as a Cairo executable,
+computes SHA-256 without syscalls, strictly parses the envelope and transaction,
+uses Shinigami for BIP341, and uses Garaga for bound BIP340 verification. Honest
+owner/CET fixtures emit `transaction_relation_valid = 1` while chain/auth stay zero; dishonest amount and oracle-outcome
+fixtures abort before an output is produced.
+
+`verify-cairo-tapout.ps1` is retained as a compatibility filename but is now a
+positive build gate. The generated fixture arguments and proofs remain ignored
+because they must be regenerated from pinned sources.
 
 Every artifact must use an immutable GitHub release and be recorded in
 `Bitvm2ClaimManifestV1` with its exact repository/commit, tag, filename, URL,

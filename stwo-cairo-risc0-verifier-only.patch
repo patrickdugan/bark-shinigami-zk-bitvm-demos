@@ -1,0 +1,364 @@
+diff --git a/stwo_cairo_prover/Cargo.lock b/stwo_cairo_prover/Cargo.lock
+index 1aef62d..cf28d14 100644
+--- a/stwo_cairo_prover/Cargo.lock
++++ b/stwo_cairo_prover/Cargo.lock
+@@ -612,7 +612,6 @@ dependencies = [
+  "num-traits",
+  "paste",
+  "rand 0.8.5",
+- "rayon",
+  "serde",
+  "serde_json",
+  "sonic-rs",
+diff --git a/stwo_cairo_prover/crates/cairo-air/Cargo.toml b/stwo_cairo_prover/crates/cairo-air/Cargo.toml
+index a3ac596..07f79f7 100644
+--- a/stwo_cairo_prover/crates/cairo-air/Cargo.toml
++++ b/stwo_cairo_prover/crates/cairo-air/Cargo.toml
+@@ -7,19 +7,21 @@ repository.workspace = true
+ description = "AIR (Algebraic Intermediate Representation) definitions for Cairo programs"
+ 
+ [features]
++default = ["host-utils"]
++host-utils = ["dep:bincode", "dep:bzip2", "dep:clap", "dep:log", "dep:serde_json", "dep:sonic-rs", "dep:tracing"]
++verifier = []
+ slow-tests = []
+ 
+ [dependencies]
+-bincode.workspace = true
+-bzip2.workspace = true
++bincode = { workspace = true, optional = true }
++bzip2 = { workspace = true, optional = true }
+ itertools.workspace = true
+-clap.workspace = true
+-log.workspace = true
++clap = { workspace = true, optional = true }
++log = { workspace = true, optional = true }
+ num-traits.workspace = true
+ paste.workspace = true
+ # TODO(Ohad): Add parallel config.
+ stwo-cairo-common = { path = "../common", version = "~1.2.2" }
+-rayon.workspace = true
+ serde.workspace = true
+ starknet-curve.workspace = true
+ starknet-ff.workspace = true
+@@ -28,11 +30,11 @@ stwo-cairo-serialize = { path = "../cairo-serialize", version = "~1.2.2" }
+ stwo.workspace = true
+ stwo-constraint-framework.workspace = true
+ thiserror.workspace = true
+-serde_json.workspace = true
+-tracing.workspace = true
++serde_json = { workspace = true, optional = true }
++tracing = { workspace = true, optional = true }
+ 
+ [target.'cfg(not(any(target_arch = "wasm32", target_arch = "wasm64")))'.dependencies]
+-sonic-rs.workspace = true
++sonic-rs = { workspace = true, optional = true }
+ 
+ [dev-dependencies]
+ rand.workspace = true
+diff --git a/stwo_cairo_prover/crates/cairo-air/src/utils.rs b/stwo_cairo_prover/crates/cairo-air/src/utils.rs
+index db2fb96..2db1cde 100644
+--- a/stwo_cairo_prover/crates/cairo-air/src/utils.rs
++++ b/stwo_cairo_prover/crates/cairo-air/src/utils.rs
+@@ -1,28 +1,43 @@
+ use std::array;
++#[cfg(feature = "host-utils")]
+ use std::fs::File;
++#[cfg(feature = "host-utils")]
+ use std::io::{Read, Write};
++#[cfg(feature = "host-utils")]
+ use std::path::Path;
+ 
++#[cfg(feature = "host-utils")]
+ use bzip2::read::BzDecoder;
++#[cfg(feature = "host-utils")]
+ use bzip2::write::BzEncoder;
++#[cfg(feature = "host-utils")]
+ use bzip2::Compression;
++#[cfg(feature = "host-utils")]
+ use clap::ValueEnum;
+ use itertools::Itertools;
+ use num_traits::Zero;
++#[cfg(feature = "host-utils")]
+ use serde::de::DeserializeOwned;
+ use serde::{Deserialize, Serialize};
+ use stwo::core::fields::m31::BaseField;
+ use stwo::core::fields::qm31::{SecureField, SECURE_EXTENSION_DEGREE};
+ use stwo::core::pcs::TreeVec;
+ use stwo::core::vcs::blake2_hash::Blake2sHasher;
++#[cfg(feature = "host-utils")]
+ use stwo::core::vcs_lifted::MerkleHasherLifted;
++#[cfg(feature = "host-utils")]
+ use stwo_cairo_serialize::{CairoDeserialize, CairoSerialize};
+ use stwo_constraint_framework::{INTERACTION_TRACE_IDX, ORIGINAL_TRACE_IDX};
++#[cfg(feature = "host-utils")]
+ use tracing::{span, Level};
+ 
+-use crate::air::{CairoProof, MemorySection, PublicMemory};
++#[cfg(feature = "host-utils")]
++use crate::air::CairoProof;
++use crate::air::{MemorySection, PublicMemory};
++#[cfg(feature = "host-utils")]
+ use crate::CairoProofForRustVerifier;
+ 
++#[cfg(feature = "host-utils")]
+ mod json {
+     #[cfg(any(target_arch = "wasm32", target_arch = "wasm64"))]
+     pub use serde_json::{from_str, to_string_pretty};
+@@ -34,6 +49,7 @@ mod json {
+ const MSB_U32: u32 = 0x80000000;
+ 
+ /// Cairo proof format
++#[cfg(feature = "host-utils")]
+ #[derive(Debug, Clone, ValueEnum)]
+ pub enum ProofFormat {
+     /// Standard JSON format.
+@@ -62,6 +78,7 @@ pub fn pack_into_secure_felts<T: Into<BaseField>>(
+         .collect_vec()
+ }
+ 
++#[cfg(feature = "host-utils")]
+ pub fn binary_serialize_to_file<T: Serialize>(
+     obj: &T,
+     proof_file: &File,
+@@ -74,6 +91,7 @@ pub fn binary_serialize_to_file<T: Serialize>(
+     Ok(())
+ }
+ 
++#[cfg(feature = "host-utils")]
+ pub fn binary_deserialize_from_file<T: DeserializeOwned>(
+     proof_file: &File,
+ ) -> Result<T, std::io::Error> {
+@@ -84,6 +102,7 @@ pub fn binary_deserialize_from_file<T: DeserializeOwned>(
+ }
+ 
+ /// Serializes Cairo proof given the desired format and writes it to a file.
++#[cfg(feature = "host-utils")]
+ pub fn serialize_proof_to_file<H: MerkleHasherLifted + Serialize>(
+     proof: &CairoProof<H>,
+     proof_path: &Path,
+@@ -126,6 +145,7 @@ where
+ }
+ 
+ /// Loads a Cairo proof for the Rust verifier from a file in the specified format.
++#[cfg(feature = "host-utils")]
+ pub fn deserialize_proof_from_file<H: MerkleHasherLifted + DeserializeOwned>(
+     proof_path: &Path,
+     proof_format: ProofFormat,
+diff --git a/stwo_cairo_prover/crates/cairo-air/src/verifier.rs b/stwo_cairo_prover/crates/cairo-air/src/verifier.rs
+index 805f00e..bae7b03 100644
+--- a/stwo_cairo_prover/crates/cairo-air/src/verifier.rs
++++ b/stwo_cairo_prover/crates/cairo-air/src/verifier.rs
+@@ -2,6 +2,7 @@ use std::collections::HashMap;
+ 
+ use num_traits::{One, Zero};
+ use paste::paste;
++#[cfg(feature = "host-utils")]
+ use serde_json::to_string_pretty;
+ use stwo::core::channel::{Channel, MerkleChannel};
+ use stwo::core::fields::m31::BaseField;
+@@ -13,6 +14,7 @@ use stwo_cairo_common::memory::{LARGE_MEMORY_VALUE_ID_BASE, LOG_MEMORY_ADDRESS_B
+ use stwo_cairo_common::prover_types::cpu::{CasmState, PRIME};
+ use stwo_constraint_framework::PREPROCESSED_TRACE_IDX;
+ use thiserror::Error;
++#[cfg(feature = "host-utils")]
+ use tracing::{span, Level};
+ 
+ use crate::air::{MemorySection, PublicData, PublicMemory, PublicSegmentRanges, SegmentRange};
+@@ -95,21 +97,33 @@ fn verify_claim(claim: &CairoClaim) {
+ }
+ 
+ fn check_relation_uses(relation_uses: &HashMap<&'static str, u64>) {
++    #[cfg(feature = "host-utils")]
+     let all_relation_uses_pretty = to_string_pretty(&relation_uses).unwrap();
++    #[cfg(feature = "host-utils")]
+     log::info!("All relation uses:\n{all_relation_uses_pretty}");
+-
+     let outstanding_relations = relation_uses
+         .iter()
+         .filter(|(_, &uses)| uses >= PRIME.into())
+         .collect::<Vec<_>>();
+ 
+     if !outstanding_relations.is_empty() {
+-        let outstanding_relations_pretty = to_string_pretty(&outstanding_relations).unwrap();
+-        panic!(
+-            "Found {} outstanding relations:\n{}",
+-            outstanding_relations.len(),
+-            outstanding_relations_pretty
+-        );
++        #[cfg(feature = "host-utils")]
++        {
++            let outstanding_relations_pretty = to_string_pretty(&outstanding_relations).unwrap();
++            panic!(
++                "Found {} outstanding relations:\n{}",
++                outstanding_relations.len(),
++                outstanding_relations_pretty
++            );
++        }
++        #[cfg(not(feature = "host-utils"))]
++        {
++            let (relation, uses) = outstanding_relations[0];
++            panic!(
++                "Found {} outstanding relations; first is {relation} with {uses} uses",
++                outstanding_relations.len()
++            );
++        }
+     }
+ }
+ 
+@@ -325,6 +339,7 @@ pub fn verify_cairo_ex<MC: MerkleChannel>(
+     }: CairoProofForRustVerifier<MC::H>,
+     include_all_preprocessed_columns: bool,
+ ) -> Result<(), CairoVerificationError> {
++    #[cfg(feature = "host-utils")]
+     let _span = span!(Level::INFO, "verify_cairo").entered();
+ 
+     // Auxiliary verifications.
+diff --git a/stwo_cairo_prover/crates/common/Cargo.toml b/stwo_cairo_prover/crates/common/Cargo.toml
+index 4b2afa7..a7f4efd 100644
+--- a/stwo_cairo_prover/crates/common/Cargo.toml
++++ b/stwo_cairo_prover/crates/common/Cargo.toml
+@@ -7,7 +7,7 @@ repository.workspace = true
+ description = "Common types and utilities shared across Stwo Cairo crates"
+ 
+ [features]
+-prover = ["stwo/parallel", "stwo/prover", "stwo-constraint-framework/parallel", "stwo-constraint-framework/prover"]
++prover = ["dep:rayon", "stwo/parallel", "stwo/prover", "stwo-constraint-framework/parallel", "stwo-constraint-framework/prover"]
+ 
+ [dependencies]
+ bytemuck.workspace = true
+@@ -21,7 +21,7 @@ stwo.workspace = true
+ stwo-constraint-framework.workspace = true
+ serde_arrays.workspace = true
+ starknet-curve.workspace = true
+-rayon.workspace = true
++rayon = { workspace = true, optional = true }
+ 
+ [dev-dependencies]
+ rand.workspace = true
+diff --git a/stwo_cairo_prover/crates/common/src/preprocessed_columns/mod.rs b/stwo_cairo_prover/crates/common/src/preprocessed_columns/mod.rs
+index 42a3aa5..4b92324 100644
+--- a/stwo_cairo_prover/crates/common/src/preprocessed_columns/mod.rs
++++ b/stwo_cairo_prover/crates/common/src/preprocessed_columns/mod.rs
+@@ -1,5 +1,6 @@
+ pub mod bitwise_xor;
+ pub mod blake;
++#[cfg(feature = "prover")]
+ mod felt_batch_inverse;
+ pub mod pedersen;
+ pub mod poseidon;
+diff --git a/stwo_cairo_prover/crates/common/src/preprocessed_columns/pedersen.rs b/stwo_cairo_prover/crates/common/src/preprocessed_columns/pedersen.rs
+index af1dc8d..b648bc3 100644
+--- a/stwo_cairo_prover/crates/common/src/preprocessed_columns/pedersen.rs
++++ b/stwo_cairo_prover/crates/common/src/preprocessed_columns/pedersen.rs
+@@ -1,24 +1,37 @@
++#[cfg(feature = "prover")]
+ use std::ops::Neg;
++#[cfg(feature = "prover")]
+ use std::sync::LazyLock;
+ 
++#[cfg(feature = "prover")]
+ use itertools::Itertools;
++#[cfg(feature = "prover")]
+ use rayon::iter::{IntoParallelIterator, ParallelIterator};
++#[cfg(feature = "prover")]
+ use starknet_curve::curve_params::{
+     PEDERSEN_P0, PEDERSEN_P1, PEDERSEN_P2, PEDERSEN_P3, SHIFT_POINT,
+ };
++#[cfg(feature = "prover")]
+ use starknet_types_core::curve::ProjectivePoint;
++#[cfg(feature = "prover")]
+ use starknet_types_core::felt::Felt;
++#[cfg(feature = "prover")]
+ use stwo::core::fields::m31::{BaseField, M31};
+ use stwo_constraint_framework::preprocessed_columns::PreProcessedColumnId;
+ 
++#[cfg(feature = "prover")]
+ use super::felt_batch_inverse::felt_batch_inverse;
+ use super::preprocessed_trace::PreProcessedColumn;
+ #[cfg(feature = "prover")]
+ use super::simd_prelude::*;
+-use crate::prover_types::cpu::{Felt252, FELT252_N_WORDS};
++#[cfg(feature = "prover")]
++use crate::prover_types::cpu::Felt252;
++use crate::prover_types::cpu::FELT252_N_WORDS;
+ 
++#[cfg(feature = "prover")]
+ pub static PEDERSEN_TABLE_9: LazyLock<PedersenPointsTable<9>> =
+     LazyLock::new(PedersenPointsTable::new);
++#[cfg(feature = "prover")]
+ pub static PEDERSEN_TABLE_18: LazyLock<PedersenPointsTable<18>> =
+     LazyLock::new(PedersenPointsTable::new);
+ 
+@@ -29,6 +42,7 @@ pub type PedersenPointsWindowBits18 = PedersenPoints<18>;
+ 
+ // We don't use starknet_types_core::curve::AffinePoint because, as of 10/2025,
+ // its .x() and .y() getters are slow.
++#[cfg(feature = "prover")]
+ #[derive(Clone)]
+ pub struct SimpleAffinePoint {
+     pub x: Felt,
+@@ -45,6 +59,7 @@ impl<const WINDOW_BITS: usize> PedersenPoints<WINDOW_BITS> {
+         Self { index: col }
+     }
+ 
++    #[cfg(feature = "prover")]
+     pub fn get_data(&self) -> &Vec<M31> {
+         match WINDOW_BITS {
+             9 => &PEDERSEN_TABLE_9.column_data[self.index],
+@@ -98,6 +113,7 @@ impl<const WINDOW_BITS: usize> PreProcessedColumn for PedersenPoints<WINDOW_BITS
+ // 2a. Next 27 blocks of 2**9 rows: Row k of block b contains -P_shift + 2**(9*b) * k * P_2
+ // 2b. The last block of 2**9 rows: Row k + (l << 5) contains
+ //       -P_shift + 2**(9*13) * k * P_2 + l * P_3
++#[cfg(feature = "prover")]
+ pub struct PedersenPointsTable<const WINDOW_BITS: usize> {
+     // The one copy of the column contents. Shared by all column instances.
+     column_data: [Vec<BaseField>; PEDERSEN_TABLE_N_COLUMNS],
+@@ -105,6 +121,7 @@ pub struct PedersenPointsTable<const WINDOW_BITS: usize> {
+     rows: Vec<SimpleAffinePoint>,
+ }
+ 
++#[cfg(feature = "prover")]
+ impl<const WINDOW_BITS: usize> PedersenPointsTable<WINDOW_BITS> {
+     #[allow(dead_code)] //  Will be used by the deduce_output of PartialEcMul
+     pub fn get_row(&self, index: usize) -> SimpleAffinePoint {
+@@ -136,6 +153,7 @@ impl<const WINDOW_BITS: usize> PedersenPointsTable<WINDOW_BITS> {
+     }
+ }
+ 
++#[cfg(feature = "prover")]
+ fn create_block(
+     start_point: &ProjectivePoint,
+     base_point: &ProjectivePoint,
+@@ -169,6 +187,7 @@ fn create_block(
+         .collect()
+ }
+ 
++#[cfg(feature = "prover")]
+ fn create_low_section(window_bits: usize, point: &ProjectivePoint) -> Vec<SimpleAffinePoint> {
+     let num_windows = 252 / window_bits;
+     let rows_per_window = 1 << window_bits;
+@@ -189,6 +208,7 @@ fn create_low_section(window_bits: usize, point: &ProjectivePoint) -> Vec<Simple
+         .concat()
+ }
+ 
++#[cfg(feature = "prover")]
+ fn create_high_section(
+     window_bits: usize,
+     low_point: &ProjectivePoint,
+@@ -215,6 +235,7 @@ fn create_high_section(
+         .concat()
+ }
+ 
++#[cfg(feature = "prover")]
+ fn create_table_rows(window_bits: usize) -> Vec<SimpleAffinePoint> {
+     assert_eq!(252 % window_bits, 0);
+     let num_windows = 252 / window_bits;
+@@ -261,6 +282,7 @@ fn create_table_rows(window_bits: usize) -> Vec<SimpleAffinePoint> {
+     rows
+ }
+ 
++#[cfg(feature = "prover")]
+ fn rows_to_columns(rows: &[SimpleAffinePoint]) -> [Vec<BaseField>; PEDERSEN_TABLE_N_COLUMNS] {
+     // Process each column in parallel.
+     let columns_vec: Vec<Vec<BaseField>> = (0..PEDERSEN_TABLE_N_COLUMNS)
