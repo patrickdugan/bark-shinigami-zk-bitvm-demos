@@ -14,14 +14,21 @@ fn main() -> Result<()> {
     let mut args = env::args_os().skip(1);
     let elf_path = args
         .next()
-        .context("usage: executor ELF PROOF EXPECTED_STATEMENT")?;
+        .context("usage: executor ELF PROOF EXPECTED_STATEMENT EXPECTED_SIGHASH")?;
     let proof_path = args.next().context("missing proof path")?;
     let expected_statement = args
         .next()
         .context("missing expected 32-byte statement digest")?
         .into_string()
         .map_err(|_| anyhow::anyhow!("statement digest must be UTF-8"))?;
+    let expected_sighash = args
+        .next()
+        .context("missing expected 32-byte Taproot sighash")?
+        .into_string()
+        .map_err(|_| anyhow::anyhow!("Taproot sighash must be UTF-8"))?;
     ensure!(args.next().is_none(), "unexpected trailing argument");
+    validate_hex_digest(&expected_statement, "statement digest")?;
+    validate_hex_digest(&expected_sighash, "Taproot sighash")?;
 
     let elf = fs::read(&elf_path).with_context(|| format!("read ELF {:?}", elf_path))?;
     let proof = fs::read(&proof_path).with_context(|| format!("read proof {:?}", proof_path))?;
@@ -69,6 +76,10 @@ fn main() -> Result<()> {
         "wrong statement digest"
     );
     ensure!(
+        encode_hex(&journal[152..184]) == expected_sighash,
+        "wrong Taproot sighash"
+    );
+    ensure!(
         journal.len() != 32,
         "denial evidence aliased the authorization journal"
     );
@@ -97,6 +108,17 @@ fn main() -> Result<()> {
 
 fn read_u32(bytes: &[u8]) -> u32 {
     u32::from_be_bytes(bytes.try_into().expect("fixed four-byte field"))
+}
+
+fn validate_hex_digest(value: &str, field: &str) -> Result<()> {
+    ensure!(
+        value.len() == 64
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
+        "{field} must be 64 lowercase hexadecimal characters"
+    );
+    Ok(())
 }
 
 fn encode_hex(bytes: &[u8]) -> String {

@@ -129,6 +129,8 @@ jobs:
         run: |
           set -uxo pipefail
           cd "${RUNNER_TEMP}/risc0-stwo-verifier-port"
+          output="${RUNNER_TEMP}/risc0-stwo-evidence"
+          mkdir -p "${output}"
           set +e
           cargo +risc0 build \
             --locked \
@@ -136,12 +138,12 @@ jobs:
             --manifest-path "${RUNNER_TEMP}/risc0-stwo-verifier-port/Cargo.toml" \
             --features risc0-guest \
             --target riscv32im-risc0-zkvm-elf \
-            --bin bark-stwo-guest 2>&1 | tee "${RUNNER_TEMP}/rv32-build.log"
+            --bin bark-stwo-guest 2>&1 | tee "${output}/rv32-build.log"
           status="${PIPESTATUS[0]}"
           set -e
 
           if [[ "${status}" -ne 0 ]]; then
-            export RV32_BUILD_LOG="${RUNNER_TEMP}/rv32-build.log"
+            export RV32_BUILD_LOG="${output}/rv32-build.log"
             {
               echo '## RV32 compiler diagnostic'
               echo '```text'
@@ -153,7 +155,20 @@ jobs:
           from pathlib import Path
 
           lines = Path(os.environ["RV32_BUILD_LOG"]).read_text(errors="replace").splitlines()
-          diagnostic = "\n".join(lines[-120:])
+          markers = (
+              "rust-lld: error:",
+              "error: linking with",
+              "error: could not compile",
+              "undefined symbol",
+              "overflowed by",
+              "will not fit in region",
+          )
+          selected = [
+              line for line in lines
+              if any(marker in line for marker in markers)
+              and not ('= note: "rust-lld"' in line and len(line) > 2000)
+          ]
+          diagnostic = "\n".join((selected or lines[-40:])[-40:])
           escaped = diagnostic.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
           print(f"::error title=RV32 compiler diagnostic::{escaped}")
           PY
@@ -206,6 +221,7 @@ jobs:
             "${elf}" \
             proof-evidence/owner_exit_allow.stwo.bin \
             34962f16168196bd39f9b516c9ef5afb8da4bfd70638d0fd3767defc266cb9be \
+            a800a956e45e99a985d853fa3dc8624a616d217ab86e612ffdb8495761d2bb5a \
             > "${output}/owner_exit_allow.execution.json" \
             2> "${output}/owner_exit_allow.execution.log"
           owner_status="$?"
@@ -213,6 +229,7 @@ jobs:
             "${elf}" \
             proof-evidence/virtual_cet_guard.stwo.bin \
             672e302333c83d08a943dc21873f9cb80d0057c3a9869cda38e9f74290361245 \
+            1631855d0955b9e6cc7a58d6828135ce55b085a2039cd8455420b3957e4ffdeb \
             > "${output}/virtual_cet_guard.execution.json" \
             2> "${output}/virtual_cet_guard.execution.log"
           cet_status="$?"
