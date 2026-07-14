@@ -16,8 +16,10 @@ pub struct BarkShinigamiInputV2 {
 }
 
 #[derive(Copy, Drop, Serde)]
-pub struct BarkShinigamiOutputV2 {
-    pub accepted: u32,
+pub struct BarkShinigamiOutputV3 {
+    pub transaction_relation_valid: u32,
+    pub chain_state_verified: u32,
+    pub operator_take_authorized: u32,
     pub statement_digest_0: u32,
     pub statement_digest_1: u32,
     pub statement_digest_2: u32,
@@ -37,7 +39,7 @@ pub struct BarkShinigamiOutputV2 {
 }
 
 #[executable]
-fn main(input: BarkShinigamiInputV2) -> BarkShinigamiOutputV2 {
+fn main(input: BarkShinigamiInputV2) -> BarkShinigamiOutputV3 {
     let BarkShinigamiInputV2 { statement_envelope, mut signature_witnesses } = input;
     let envelope = decode(@statement_envelope);
     let validated_spend = validate_and_sighash(@envelope);
@@ -76,10 +78,13 @@ fn main(input: BarkShinigamiInputV2) -> BarkShinigamiOutputV2 {
     let [d0, d1, d2, d3, d4, d5, d6, d7] = compute_sha256_byte_array(@tagged_preimage);
     let [s0, s1, s2, s3, s4, s5, s6, s7] = u256_words(validated_spend.taproot_sighash);
 
-    // Reaching this output means the strict envelope/transaction policy,
-    // Shinigami BIP341 digest, and every role-specific BIP340 check succeeded.
-    BarkShinigamiOutputV2 {
-        accepted: 1,
+    // Reaching this output means the signed transaction relation succeeded.
+    // Heights in the envelope are not authenticated Bitcoin chain facts, so
+    // chain-state verification and operator authorization remain fail-closed.
+    BarkShinigamiOutputV3 {
+        transaction_relation_valid: 1,
+        chain_state_verified: 0,
+        operator_take_authorized: 0,
         statement_digest_0: d0,
         statement_digest_1: d1,
         statement_digest_2: d2,

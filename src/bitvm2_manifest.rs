@@ -155,9 +155,13 @@ pub struct ManifestParams {
     pub risc0_image_id: [u8; 32],
     pub expected_boundless_claim_digest: [u8; 32],
     pub boundless_request: BoundlessRequestProvenance,
+    /// Hash of the claim-specialized key (IC0 + claim*IC1, identity runtime
+    /// base), not the generic Boundless verification key.
     pub boundless_verifying_key_sha256: [u8; 32],
     pub bitvm2_graph_sha256: [u8; 32],
     pub verifier_public_input_count: usize,
+    /// Claim scalar folded into the specialized key. The official BitVM API is
+    /// invoked with a zero runtime scalar after this specialization.
     pub bitvm2_expected_public_scalar: [u8; 32],
     pub artifacts: Vec<ArtifactProvenance>,
 }

@@ -1,8 +1,8 @@
 //! Fail-closed policy around a future BitVM assertion graph.
 //!
-//! This is a deterministic state-machine model, not a Bitcoin transaction
-//! builder. `OperatorTake` is unreachable unless callers provide evidence for
-//! every proof, relay, watcher, and confirmation gate.
+//! This is a deterministic test-only state-machine model, not a Bitcoin
+//! transaction builder or authorization API. Its Boolean evidence and decision
+//! function are private so production callers cannot mint an `OperatorTake`.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TimingPolicy {
@@ -62,17 +62,18 @@ impl BondPolicy {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct EnforcementEvidence {
-    pub exact_statement_valid: bool,
-    pub real_boundless_receipt_verified: bool,
-    pub bitvm_verifier_trace_verified: bool,
-    pub all_transactions_core_accepted: bool,
-    pub all_transactions_standard: bool,
-    pub fresh_permissionless_watcher_exercised: bool,
-    pub challenge_window_elapsed: bool,
-    pub invalid_claim_challenged: bool,
-    pub disprove_confirmed: bool,
-    pub all_watchers_offline: bool,
+#[cfg(test)]
+struct EnforcementEvidence {
+    exact_statement_valid: bool,
+    real_boundless_receipt_verified: bool,
+    bitvm_verifier_trace_verified: bool,
+    all_transactions_core_accepted: bool,
+    all_transactions_standard: bool,
+    fresh_permissionless_watcher_exercised: bool,
+    challenge_window_elapsed: bool,
+    invalid_claim_challenged: bool,
+    disprove_confirmed: bool,
+    all_watchers_offline: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,7 +84,12 @@ pub enum EnforcementDecision {
     OfflineWatcherAssumptionFailure,
 }
 
-pub fn decide(evidence: EnforcementEvidence) -> EnforcementDecision {
+// Deliberately private: booleans model the future state machine in tests, but
+// callers must never mint authorization by constructing an all-true struct.
+// A public decision API requires opaque evidence types created by actual proof,
+// Bitcoin Core, confirmation, and watcher verifiers.
+#[cfg(test)]
+fn decide(evidence: EnforcementEvidence) -> EnforcementDecision {
     if !evidence.exact_statement_valid {
         if evidence.all_watchers_offline && evidence.challenge_window_elapsed {
             return EnforcementDecision::OfflineWatcherAssumptionFailure;

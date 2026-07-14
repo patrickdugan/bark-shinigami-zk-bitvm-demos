@@ -8,7 +8,7 @@ The replacement pipeline is:
 
 ```text
 BarkSpendEnvelopeV1
-  -> Cairo executes Shinigami and emits accepted + statement digest
+  -> Cairo executes Shinigami and emits relation-valid + fail-closed chain/auth flags + statement digest
   -> STWO under exact StwoPolicyV1
   -> RISC Zero guest verifies program, output, policy, and STWO proof
   -> 32-byte statement-digest journal
@@ -19,7 +19,7 @@ BarkSpendEnvelopeV1
 The checked-in `cairo-shinigami` program now builds as a Cairo executable,
 computes SHA-256 without syscalls, strictly parses the envelope and transaction,
 uses Shinigami for BIP341, and uses Garaga for bound BIP340 verification. Honest
-owner/CET fixtures emit `accepted = 1`; dishonest amount and oracle-outcome
+owner/CET fixtures emit `transaction_relation_valid = 1` while chain/auth stay zero; dishonest amount and oracle-outcome
 fixtures abort before an output is produced.
 
 `verify-cairo-tapout.ps1` is retained as a compatibility filename but is now a

@@ -22,7 +22,7 @@ use crate::stwo_policy::StwoPolicyV1;
 
 pub const SHINIGAMI_COMMIT: &str = "565d7c7375bd090047137da702b2bfdcd48ec58d";
 pub const CAIRO_RELATION_ID: &str = concat!(
-    "bark-shinigami-relation-v3;",
+    "bark-shinigami-relation-v4-chain-state-fail-closed;",
     "shinigami=565d7c7375bd090047137da702b2bfdcd48ec58d;",
     "garaga=0e986ba5133c16a30ac86a7cd07c9551787d0e91;",
     "alexandria=6d2cfcc0954c8d7796f028b25336faa8e9378da8",
@@ -58,6 +58,8 @@ impl DemoCase {
 pub struct HostValidation {
     pub bark_vtxo_valid: bool,
     pub exact_spend_valid: bool,
+    /// Always false until a header-chain and UTXO-inclusion witness is checked.
+    pub chain_state_verified: bool,
     pub oracle_evidence_valid: Option<bool>,
     pub reason: String,
 }
@@ -67,8 +69,10 @@ impl HostValidation {
         Self {
             bark_vtxo_valid: true,
             exact_spend_valid: true,
+            chain_state_verified: false,
             oracle_evidence_valid,
-            reason: "exact Bark spend and role evidence validated".to_owned(),
+            reason: "signed Bark transaction relation validated; Bitcoin chain state is not proven"
+                .to_owned(),
         }
     }
 
@@ -76,6 +80,7 @@ impl HostValidation {
         Self {
             bark_vtxo_valid,
             exact_spend_valid: false,
+            chain_state_verified: false,
             oracle_evidence_valid: None,
             reason: reason.into(),
         }
@@ -261,12 +266,9 @@ pub fn validate_host(envelope: &BarkSpendEnvelopeV1) -> HostValidation {
     {
         return HostValidation::failure(true, "input sequence does not satisfy the Bark block CSV");
     }
-    let maturity = envelope
-        .prevout_confirmed_height
-        .checked_add(u32::from(vtxo.exit_delta()));
-    if maturity.is_none() || envelope.chain_height < maturity.unwrap() {
-        return HostValidation::failure(true, "chain-height context is not CSV-mature");
-    }
+    // The two height fields are statement context, not verified Bitcoin facts.
+    // Sequence commits the owner's CSV intent; actual maturity is left to
+    // Bitcoin consensus or a future header-chain + inclusion proof.
     let output_sum = spend
         .output
         .iter()
@@ -392,11 +394,12 @@ pub fn build_receipt(case: DemoCase) -> Value {
         "host_preflight": {
             "bark_vtxo_valid": validation.bark_vtxo_valid,
             "exact_spend_valid": validation.exact_spend_valid,
+            "chain_state_verified": validation.chain_state_verified,
             "oracle_evidence_valid": validation.oracle_evidence_valid,
             "reason": validation.reason,
         },
         "proof_pipeline": {
-            "shinigami_relation": "ready: syscall-free SHA-256, strict envelope/transaction policy, Shinigami BIP341, and constrained Garaga BIP340 checks execute successfully; a verified STWO proof artifact is still required",
+            "shinigami_relation": "ready: syscall-free SHA-256, strict envelope/transaction policy, Shinigami BIP341, and constrained Garaga BIP340 checks execute successfully; chain state is deliberately unproven and a verified STWO proof artifact is still required",
             "accepted_for_authorization": false,
             "stwo_policy_digest": hex(&StwoPolicyV1::REQUIRED.digest()),
             "risc0_receipt": "unavailable",
@@ -587,7 +590,19 @@ mod tests {
     #[test]
     fn honest_owner_exit_is_an_exact_signed_bark_spend() {
         let envelope = build_envelope_with_nonce(DemoCase::OwnerExitAllow, [1; 32]);
-        assert!(validate_host(&envelope).exact_spend_valid);
+        let result = validate_host(&envelope);
+        assert!(result.exact_spend_valid);
+        assert!(!result.chain_state_verified);
+    }
+
+    #[test]
+    fn self_asserted_heights_never_become_verified_chain_state() {
+        let mut envelope = build_envelope_with_nonce(DemoCase::OwnerExitAllow, [1; 32]);
+        envelope.chain_height = 2016;
+        envelope.prevout_confirmed_height = 0;
+        let result = validate_host(&envelope);
+        assert!(result.exact_spend_valid);
+        assert!(!result.chain_state_verified);
     }
 
     #[test]

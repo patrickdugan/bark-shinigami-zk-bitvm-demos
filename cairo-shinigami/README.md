@@ -10,7 +10,7 @@ An accepting execution proves all of the following inside Cairo:
 - the exact canonical `BarkSpendEnvelopeV1` decoder consumed every byte;
 - network, Bark fixture VTXO/anchor, relation, and STWO policy pins match;
 - a canonical one-input SegWit v1 transaction spends the pinned outpoint;
-- amounts, outputs, CSV maturity, witness shape, owner script, and control block
+- amounts, outputs, CSV sequence intent, witness shape, owner script, and control block
   satisfy the specialized showcase policy;
 - Shinigami computes the same BIP341 script-path sighash as rust-bitcoin;
 - Garaga verifies the owner BIP340 signature against that exact digest;
@@ -19,6 +19,11 @@ An accepting execution proves all of the following inside Cairo:
 
 The relation uses constrained off-chain MSM hints. `generate-garaga-arguments.py`
 creates them; they are not trusted because Garaga checks them in Cairo.
+
+`chain_height` and `prevout_confirmed_height` are not trusted as chain facts.
+The public output therefore reports `transaction_relation_valid = 1`,
+`chain_state_verified = 0`, and `operator_take_authorized = 0` until a Bitcoin
+header-chain and UTXO-inclusion witness is implemented.
 
 This package does not by itself authorize a Bitcoin output. A verified STWO
 proof, recursive outer proof, and relay-tested BitVM dispute graph are separate

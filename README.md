@@ -29,9 +29,12 @@ never authorizes the operator-take path.
 - A STWO-executable Shinigami relation with Alexandria's pinned pure-Cairo
   SHA-256, strict envelope and canonical Bitcoin transaction parsers,
   Shinigami's BIP341 sighash, and Garaga's pure-Cairo secp256k1 verifier. It
-  emits `accepted = 1` only after binding the owner signature to the exact Bark
-  spend; the CET case additionally verifies the pinned oracle announcement and
-  attestation and binds every payout to a transaction output.
+  emits `transaction_relation_valid = 1` only after binding the owner signature
+  to the exact Bark spend; the CET case additionally verifies the pinned oracle
+  announcement and attestation and binds every payout to a transaction output.
+  It separately emits `chain_state_verified = 0` and
+  `operator_take_authorized = 0`: envelope height integers are not Bitcoin
+  header/UTXO proofs.
 - Fixture-specific Bark policy pins for regtest genesis, VTXO/anchor hashes,
   owner leaf/control block, Shinigami relation ID, and STWO policy. This is a
   showcase relation for the checked-in Bark vector, not a generic replacement
@@ -42,6 +45,12 @@ never authorizes the operator-take path.
 - Strict Boundless `Blake3Groth16V0_1` parsing: selector `62f049f6`, 32-byte
   journal, 256-byte raw proof, one canonical BN254 public scalar, and
   claim-specific BitVM2 GitHub provenance checks.
+- A cryptographic Boundless-to-BitVM adapter pinned to Boundless commit
+  `1c334eb77717089c835652b9483bb79c82fbdafe` and official BitVM commit
+  `7d1ca3660cac08aab62e76f3aa4daec0d7403ecc`. It recomputes the claim from the
+  independent RISC Zero image ID and Bark statement digest, strictly decodes
+  every proof coordinate, verifies Groth16, and folds the claim scalar into a
+  claim-specialized verification key before the official BitVM chunker sees it.
 - Fail-closed BitVMX gates for the 256-byte outer proof, including resource,
   standardness, and fresh permissionless-watcher observations.
 - A bond/dispute state-machine model with regtest/signet deadlines, whole-graph
@@ -77,6 +86,8 @@ $env:CARGO_TARGET_DIR = 'D:\cargo-target\bark-zk-bitvm-showcase'
 $env:TEMP = 'D:\cargo-target\tmp'
 $env:TMP = $env:TEMP
 cargo test --all-targets
+$scarb = 'D:\_tools\scarb-v2.18.0\scarb-v2.18.0-x86_64-pc-windows-msvc\bin\scarb.exe'
+.\test-cairo-adversarial.ps1 -Scarb $scarb
 ```
 
 The suite includes 10,000 seeded statement mutations per demo, strict codec
@@ -86,11 +97,16 @@ bond/timing/offline-watcher controls. The older UTXORef trusted-cosigner
 exercise remains under `run-red-blue.ps1` as historical attack evidence only;
 it is not the ZK-BitVM security boundary.
 
+The current executable-Cairo and outer-boundary findings are recorded in
+[`ZK_RED_BLUE_REPORT.md`](ZK_RED_BLUE_REPORT.md).
+
 Before any positive signet label, the remaining gates are:
 
 1. generate the new STWO proof under exactly `StwoPolicyV1` on a sufficiently
    large Linux host;
-2. build the RISC Zero STWO-verifier guest with dev receipts disabled;
+2. port the Cairo/STWO verifier to a verifier-only RISC Zero RV32IM guest and
+   build it with dev receipts disabled (upstream Cairo verifier dependencies are
+   not guest-compatible as-is);
 3. obtain and verify a real Boundless Blake3Groth16 receipt on Sepolia;
 4. build BitVM2 and BitVMX candidates and require every transaction to pass
    Bitcoin Core 31.1 consensus and `testmempoolaccept`;

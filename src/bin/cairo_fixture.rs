@@ -165,6 +165,9 @@ fn is_semantic_mutation(mutation: &str) -> bool {
             | "false_protocol_vtxo"
             | "false_anchor"
             | "false_stwo_pin"
+            | "false_heights"
+            | "false_risc0_pin"
+            | "phantom_prevout_amount"
     )
 }
 
@@ -186,6 +189,12 @@ fn mutate_envelope(envelope: &mut BarkSpendEnvelopeV1, mutation: &str) {
         "false_protocol_vtxo" => envelope.protocol_vtxo[0] ^= 1,
         "false_anchor" => envelope.anchor_transaction[0] ^= 1,
         "false_stwo_pin" => envelope.pins.stwo_policy[0] ^= 1,
+        "false_heights" => {
+            envelope.chain_height = 2016;
+            envelope.prevout_confirmed_height = 0;
+        }
+        "false_risc0_pin" => envelope.pins.risc0_image_id[31] = 1,
+        "phantom_prevout_amount" => envelope.prevouts[0].amount_sats = 9_999,
         _ => unreachable!("semantic mutation was classified above"),
     }
 }

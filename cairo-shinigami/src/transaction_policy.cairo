@@ -11,6 +11,7 @@ use crate::envelope::BarkSpendEnvelopeV1;
 
 const MAX_OUTPUTS: usize = 4096;
 const MAX_SCRIPT_BYTES: usize = 10000;
+const MAX_CONSERVATIVE_STANDARD_TX_BYTES: usize = 100000;
 const REQUIRED_SCRIPT_FLAGS: u32 = 0x11010;
 const EXPECTED_CSV_DELAY: u32 = 2016;
 
@@ -66,7 +67,7 @@ pub fn validate_and_sighash(envelope: @BarkSpendEnvelopeV1) -> ValidatedSpendV1 
         envelope
             .pins
             .cairo_program == @hex_to_bytecode(
-                @"0xc56dcc4083b288b1799f8d7c3cbd49cec0a41a20242047400036a3b70e6d6b4f",
+                @"0xfaa9f2b564f0ddb527deb56168ad96723d5b435ed45702d840960edb70b504c7",
             ),
         'Cairo relation pin mismatch',
     );
@@ -78,17 +79,26 @@ pub fn validate_and_sighash(envelope: @BarkSpendEnvelopeV1) -> ValidatedSpendV1 
             ),
         'STWO policy pin mismatch',
     );
+    assert(
+        envelope
+            .pins
+            .risc0_image_id == @hex_to_bytecode(
+                @"0x0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+        'RISC0 image unavailable',
+    );
     assert(*envelope.input_index == 0, 'input index must be zero');
     assert(envelope.prevouts.len() == 1, 'one prevout required');
     assert(*envelope.script_flags == REQUIRED_SCRIPT_FLAGS, 'script flags mismatch');
-    assert(*envelope.chain_height >= *envelope.prevout_confirmed_height, 'height order invalid');
-    assert(
-        *envelope.chain_height - *envelope.prevout_confirmed_height >= EXPECTED_CSV_DELAY,
-        'csv not mature',
-    );
+    // Do not trust envelope heights as Bitcoin facts. The transaction's
+    // sequence proves CSV intent, while actual maturity requires Bitcoin Core
+    // consensus or a future header-chain + UTXO-inclusion proof.
 
     let prevout = envelope.prevouts.at(0);
-    assert(*prevout.amount_sats <= 0x7fffffffffffffff, 'prevout amount range');
+    // This specialized relation pins the exact checked-in Bark fixture. A
+    // generic relation must decode the VTXO and anchor rather than accepting a
+    // caller-supplied amount.
+    assert(*prevout.amount_sats == 10000, 'unexpected Bark prevout amount');
     assert(
         prevout
             .script_pubkey == @hex_to_bytecode(
@@ -98,6 +108,9 @@ pub fn validate_and_sighash(envelope: @BarkSpendEnvelopeV1) -> ValidatedSpendV1 
     );
 
     let raw = envelope.spend_transaction;
+    // Conservatively cap serialized bytes so even treating every byte as
+    // non-witness data cannot exceed Bitcoin's 400,000 WU standard limit.
+    assert(raw.len() <= MAX_CONSERVATIVE_STANDARD_TX_BYTES, 'transaction too large');
     let mut offset: usize = 0;
     let version = read_u32_le(raw, ref offset);
     assert(version == 2, 'transaction version');
@@ -158,7 +171,7 @@ pub fn validate_and_sighash(envelope: @BarkSpendEnvelopeV1) -> ValidatedSpendV1 
     let utxo = UTXO {
         amount: (*prevout.amount_sats).try_into().unwrap(),
         pubkey_script: prevout.script_pubkey.clone(),
-        block_height: *envelope.prevout_confirmed_height,
+        block_height: 0,
     };
     let transaction: EngineTransaction = EngineInternalTransactionTrait::deserialize(
         envelope.spend_transaction.clone(), 0, array![utxo],
