@@ -27,6 +27,7 @@ jobs:
       RUST_BACKTRACE: 1
       STWO_CAIRO_COMMIT: b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1
       EXPECTED_ARGUMENTS_SHA256: 567e34c007b91211087d37433e45cf392570c05ebd269330fd6b2f73317ff399
+      EXPECTED_EXECUTABLE_SHA256: 5b1e4c7c4a545b5ee34c06d672cfa1d4e3e38b732951c60a65a5dcdaba4b5c22
       EXPECTED_PATCH_SHA256: 0409da2904e07a38b37030c0a45f050efb59847f2b70f16bf50ee14cfe35f551
 
     steps:
@@ -37,23 +38,38 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          lscpu
-          free -h
-          df -h
+          mkdir -p proofs
+          {
+            lscpu
+            free -h
+            df -h
+          } | tee proofs/runner-resources.txt
 
       - name: Install Scarb 2.18.0
         uses: software-mansion/setup-scarb@2a96b748888e3329ee44ac9ac073d930e692b3cd
         with:
           scarb-version: 2.18.0
+          cache: false
 
       - name: Build the pinned Cairo executable
         shell: bash
         run: |
           set -euxo pipefail
+          git config --global http.version HTTP/1.1
           cd cairo-shinigami
           scarb fmt --check
-          scarb build
-          sha256sum target/dev/bark_shinigami_relation.executable.json
+          export SCARB_LOG=debug
+          for attempt in 1 2 3; do
+            if scarb build 2>&1 | tee -a ../proofs/scarb-build.log; then
+              break
+            fi
+            if [ "${attempt}" -eq 3 ]; then
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "${EXPECTED_EXECUTABLE_SHA256}  target/dev/bark_shinigami_relation.executable.json" \
+            | sha256sum --check
 
       - name: Verify immutable prover inputs
         shell: bash
@@ -76,11 +92,26 @@ jobs:
             cargo +nightly-2025-06-23 build --release \
               -p stwo-cairo-dev-utils --bin run_and_prove
 
-      - name: Generate and internally verify the STWO proof
+      - name: Add swap for the memory-bound prover
         shell: bash
         run: |
           set -euxo pipefail
+          sudo fallocate -l 24G /swapfile-stwo
+          sudo chmod 600 /swapfile-stwo
+          sudo mkswap /swapfile-stwo
+          sudo swapon /swapfile-stwo
+          {
+            free -h
+            swapon --show
+            df -h
+          } | tee -a proofs/runner-resources.txt
+
+      - name: Generate and internally verify the STWO proof
+        shell: bash
+        run: |
+          set -uxo pipefail
           mkdir -p proofs
+          set +e
           /usr/bin/time -v -o proofs/owner_exit_allow.metrics.txt \
             stwo-cairo/stwo_cairo_prover/target/release/run_and_prove \
               --program cairo-shinigami/target/dev/bark_shinigami_relation.executable.json \
@@ -89,25 +120,28 @@ jobs:
               --proof_path proofs/owner_exit_allow.stwo.bin \
               --proof-format binary \
               --verify
-          sha256sum \
-            cairo-shinigami/target/dev/bark_shinigami_relation.executable.json \
-            proof-inputs/owner_exit_allow.arguments.json \
-            proofs/owner_exit_allow.stwo.bin \
-            stwo-cairo-public-segments.patch \
-            | tee proofs/SHA256SUMS
-          cat proofs/owner_exit_allow.metrics.txt
+          proof_status=$?
+          set -e
+          if [ -f proofs/owner_exit_allow.stwo.bin ]; then
+            sha256sum \
+              cairo-shinigami/target/dev/bark_shinigami_relation.executable.json \
+              proof-inputs/owner_exit_allow.arguments.json \
+              proofs/owner_exit_allow.stwo.bin \
+              stwo-cairo-public-segments.patch \
+              | tee proofs/SHA256SUMS
+          fi
+          cat proofs/owner_exit_allow.metrics.txt || true
+          exit "${proof_status}"
 
       - name: Upload verified proof and measurements
-        if: success()
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: owner-exit-stwo-${{ github.sha }}
           path: |
-            proofs/owner_exit_allow.stwo.bin
-            proofs/owner_exit_allow.metrics.txt
-            proofs/SHA256SUMS
+            proofs/**
             cairo-shinigami/target/dev/bark_shinigami_relation.executable.json
             proof-inputs/owner_exit_allow.arguments.json
             stwo-cairo-public-segments.patch
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
