@@ -445,6 +445,7 @@ dependencies = [
  "ruint",
  "sha2",
  "stwo",
+ "stwo-cairo-common",
 ]
 
 [[package]]

@@ -42,9 +42,10 @@ reports `not_enforced` and never authorizes the operator-take path.
   owner leaf/control block, Shinigami relation ID, and STWO policy. This is a
   showcase relation for the checked-in Bark vector, not a generic replacement
   for Shinigami's full Bitcoin Script engine.
-- Exact `StwoPolicyV1` pinning: Blake2s, PoW 26, interaction PoW 24, blowup 1,
-  70 queries, last-layer degree 0, fold step 1, no lifting log size, and the
-  canonical preprocessed trace variant.
+- Exact `StwoPolicyV1` pinning: Blake2s, channel salt 0, PoW 26, interaction
+  PoW 24, blowup 1, 70 queries, last-layer degree 0, fold step 1, no lifting
+  log size, and the canonical preprocessed trace variant. Its canonical record
+  is checked in under `proof-evidence/`.
 - Reproducible binary STWO proof vectors for the fixed owner-exit and virtual
   CET fixtures. GitHub Actions built STWO commit `b1acf8bf...`, proved both,
   ran its internal verifier, and required the dishonest output mutation to
@@ -52,20 +53,26 @@ reports `not_enforced` and never authorizes the operator-take path.
   under [`proof-evidence/`](proof-evidence/README.md).
 - A pinned binary-proof reload verifier that deserializes the saved artifacts,
   invokes STWO's real `verify_cairo`, records the authenticated program hash
-  and exact 19-felt outputs, and rejects a mutated serialized proof.
+  and exact 19-felt outputs, enforces every policy parameter, and rejects a
+  mutated proof, a compressed-stream trailer, and a bincode-object trailer.
 - A fail-closed [`risc0-stwo-verifier/`](risc0-stwo-verifier/README.md)
   scaffold and exact [`RISC0_STWO_DESIGN.md`](RISC0_STWO_DESIGN.md) recursion
-  contract. The native adapter uses the real upstream verifier; the RV32 guest
-  deliberately refuses to build until Cairo-AIR is split into a verifier-only
-  guest-compatible dependency graph.
+  contract. It strictly parses the complete guest frame and Bark envelope,
+  binds the two image IDs in one operation, and encodes the exact 378-byte
+  artifact journal. The native adapter uses the real upstream verifier; the
+  RV32 guest still refuses to build until Cairo-AIR is split into a
+  verifier-only guest-compatible dependency graph. The reproduced target
+  failures and minimal port are recorded in
+  [`RISC0_RV32_PORT_AUDIT.md`](RISC0_RV32_PORT_AUDIT.md).
 - Strict Boundless `Blake3Groth16V0_1` parsing: selector `62f049f6`, 32-byte
   journal, 256-byte raw proof, one canonical BN254 public scalar, and
   claim-specific BitVM2 GitHub provenance checks.
-- A cryptographic Boundless-to-BitVM adapter pinned to Boundless commit
+- Versioned cryptographic Boundless-to-BitVM adapters pinned to Boundless commit
   `1c334eb77717089c835652b9483bb79c82fbdafe` and official BitVM commit
-  `7d1ca3660cac08aab62e76f3aa4daec0d7403ecc`. It recomputes the claim from the
-  independent RISC Zero image ID and Bark statement digest, strictly decodes
-  every proof coordinate, verifies Groth16, and folds the claim scalar into a
+  `7d1ca3660cac08aab62e76f3aa4daec0d7403ecc`. The artifact-complete profile
+  recomputes the tagged journal from the exact executable, envelope, STWO proof,
+  program, policy, output, nonce, and image bindings; strictly decodes every
+  proof coordinate; verifies Groth16; and folds the claim scalar into a
   claim-specialized verification key before the official BitVM chunker sees it.
 - Fail-closed BitVMX gates for the 256-byte outer proof, including resource,
   standardness, and fresh permissionless-watcher observations.

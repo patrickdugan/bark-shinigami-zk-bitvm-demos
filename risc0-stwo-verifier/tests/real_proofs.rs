@@ -41,6 +41,10 @@ fn checked_in_proofs_verify_but_cannot_emit_an_authorization_journal() {
         )
         .unwrap();
         let verified = verify_compressed_binary(&proof).expect("real STWO proof must verify");
+        assert_eq!(
+            verified.stwo_program_hash_be(),
+            &decode_hex_32("00bcd09f617edcfc9ee2bbbb74192f42dfed6b7a505578a3748ac93f8ad697f0")
+        );
         assert!(verified.output().transaction_relation_valid());
         assert!(!verified.output().chain_state_verified());
         assert!(!verified.output().operator_take_authorized());

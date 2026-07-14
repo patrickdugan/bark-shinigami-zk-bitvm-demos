@@ -8,6 +8,8 @@
 
 use core::fmt;
 
+pub mod binding_v1;
+
 #[cfg(any(test, feature = "upstream-stwo"))]
 use sha2::{Digest, Sha256};
 
@@ -168,6 +170,7 @@ impl VerificationPolicy {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct VerifiedExecution {
     output: RelationOutputV3,
+    stwo_program_hash_be: [u8; 32],
     program_commitment: [u8; 32],
     stwo_policy_commitment: [u8; 32],
 }
@@ -176,11 +179,13 @@ impl VerifiedExecution {
     #[cfg(any(test, feature = "upstream-stwo"))]
     pub(crate) fn from_cryptographic_verifier(
         output: RelationOutputV3,
+        stwo_program_hash_be: [u8; 32],
         program_commitment: [u8; 32],
         stwo_policy_commitment: [u8; 32],
     ) -> Self {
         Self {
             output,
+            stwo_program_hash_be,
             program_commitment,
             stwo_policy_commitment,
         }
@@ -188,6 +193,10 @@ impl VerifiedExecution {
 
     pub fn output(&self) -> &RelationOutputV3 {
         &self.output
+    }
+
+    pub fn stwo_program_hash_be(&self) -> &[u8; 32] {
+        &self.stwo_program_hash_be
     }
 
     /// Returns the only journal shape allowed to reach Boundless. Failure means
@@ -289,6 +298,7 @@ mod tests {
     fn verified(flags: [u32; 3]) -> VerifiedExecution {
         VerifiedExecution::from_cryptographic_verifier(
             RelationOutputV3::parse(&words(flags)).unwrap(),
+            [0x10; 32],
             PROGRAM,
             STWO_POLICY,
         )

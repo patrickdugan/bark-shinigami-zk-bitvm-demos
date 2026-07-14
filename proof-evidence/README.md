@@ -12,7 +12,10 @@ The checked-in compressed artifacts were also reloaded with the pinned native
 `verify_cairo`. Both authenticate STWO program hash
 `0xbcd09f617edcfc9ee2bbbb74192f42dfed6b7a505578a3748ac93f8ad697f0`
 and exact 19-felt outputs recorded in the `*.verified-output.json` files. A
-one-byte mutation of the serialized owner proof is rejected.
+one-byte mutation of the serialized owner proof, bytes appended after its
+bzip2 stream, and bytes appended after its bincode object are rejected. The
+machine-readable `stwo-policy-v1.json` records the exact policy enforced by the
+reload verifier.
 
 The dishonest owner-exit fixture changes the output amount without resigning.
 It exited 1 at Cairo `ASSERT_EQ` in 0.94 seconds and the workflow asserted that

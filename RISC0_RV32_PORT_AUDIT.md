@@ -1,0 +1,105 @@
+# RISC Zero RV32 verifier-port audit
+
+Status: **not buildable yet; fail closed**. This audit removes no verification
+check and does not introduce a host-supplied acceptance value.
+
+## Reproduced boundary
+
+The audit used isolated copies of the exact proof dependencies:
+
+- `stwo-cairo` `b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1`
+- STWO `93dd93e04f42edba48d8984858c8c39ce9f30c8c`
+- `risc0-zkvm` `3.0.4`
+
+The only source change before cross-compilation was removal of the deliberate
+`target_os = "zkvm"` `compile_error!` guard. The verifier still deserializes
+`CairoProofForRustVerifier<Blake2sMerkleHasher>` and calls the real
+`verify_cairo::<Blake2sMerkleChannel>` function.
+
+RISC Zero does not publish its custom Rust target for native Windows. The real
+cross-check therefore ran under Ubuntu WSL with official RISC Zero Rust and:
+
+```text
+cargo +risc0 check \
+  --features risc0-guest \
+  --target riscv32im-risc0-zkvm-elf
+```
+
+The target needs the standard RISC Zero custom-randomness selection, even when
+the verifier never asks for randomness:
+
+```toml
+[target.riscv32im-risc0-zkvm-elf]
+rustflags = ['--cfg', 'getrandom_backend="custom"']
+```
+
+Without it, `getrandom 0.3.4`, reached through
+`risc0-zkvm-platform 2.2.2`, stops at its unsupported-target
+`compile_error!`.
+
+## Exact failures reached
+
+With that target configuration, RISC Zero Rust `1.94.1` reaches two independent
+failures:
+
+1. `risc0-zkvm 3.0.4` defines `panic_impl`, but the 1.94.1 target sysroot also
+   loads `std` and defines the same lang item. This SDK/toolchain mismatch
+   produces `E0152: found duplicate lang item panic_impl` before the guest can
+   link. The historically matching RISC Zero Rust release is `r0.1.88.0`,
+   published June 27, 2025. Its diagnostic rerun was started but deliberately
+   capped rather than waiting indefinitely for the 490,849,318-byte toolchain
+   download.
+2. `sonic-rs 0.3.17`, pulled unconditionally by `cairo-air`, fails on RV32 with
+   `E0512`: its `MetaNode` is 64 bits while `Value` is 128 bits, so its internal
+   transmute is invalid. `sonic-rs` is used only by host JSON/file utilities;
+   it is not part of the cryptographic verification relation.
+
+The second failure is a genuine `stwo-cairo` verifier packaging blocker and is
+not fixed by adding RAM or using a remote prover.
+
+## Exact dependency audit
+
+At the pinned commit, `cairo-air` unconditionally includes dependencies that
+the verifier call does not need: Clap, bzip2, serde JSON, `sonic-rs`, and Rayon.
+Its public `utils` module mixes the verifier-required
+`pack_into_secure_felts` helper with host proof-file and JSON utilities.
+
+`stwo-cairo-common` also unconditionally depends on Rayon, primarily for
+Pedersen table construction. This remains a portability risk to test after
+removing `sonic-rs`; it was not the first compiler failure and is therefore not
+claimed here as a confirmed blocker.
+
+The previous portable-SIMD diagnosis was too broad. In the pinned graph,
+`prover_types::simd` and STWO's SIMD backend are already gated by the `prover`
+feature, and the verifier build does not enable that feature.
+
+`verify_cairo` itself uses `std::collections::HashMap` and `serde_json` only to
+format relation-use diagnostics. The relation-use bounds and all calls to
+STWO's PCS/FRI verifier must remain unchanged.
+
+## Minimal verifier-only port
+
+The smallest defensible upstream patch is:
+
+1. Add a `verifier` feature to `cairo-air`; put file I/O, Clap, bzip2,
+   `serde_json`, and `sonic-rs` behind a separate host-utils feature.
+2. Move `pack_into_secure_felts` into an allocation-only verifier utility
+   module so `air.rs` and `flat_claims.rs` do not import the file utility module.
+3. Remove pretty-JSON diagnostic formatting from the verifier-only build while
+   preserving the exact `uses >= PRIME` rejection and every assertion in
+   `verify_claim`.
+4. Make Rayon optional in `stwo-cairo-common`. Provide sequential Pedersen
+   table construction for the verifier build, or omit table materialization
+   when only preprocessed IDs and log sizes are requested.
+5. Set `default-features = false` for `stwo` and
+   `stwo-constraint-framework`, enabling only their verifier-compatible `std`
+   surface if the matching RISC Zero target requires it.
+6. Cross-compile with the SDK-matched RISC Zero Rust 1.88.0 toolchain, then run
+   the two checked-in proofs through the resulting guest before measuring and
+   pinning its image ID.
+
+Do not remove the scaffold's compile guard until that build succeeds. Do not
+replace `verify_cairo` with a Boolean, a host attestation, or a development
+receipt. A compile-only CI job should pin all four versions (RISC Zero Rust,
+SDK, STWO, and `stwo-cairo`) so an incompatible latest toolchain cannot mask a
+real regression.

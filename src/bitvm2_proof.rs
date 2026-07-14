@@ -21,6 +21,192 @@ const BN254_BASE_MODULUS_BE: [u8; 32] = [
     0x97, 0x81, 0x6a, 0x91, 0x68, 0x71, 0xca, 0x8d, 0x3c, 0x20, 0x8c, 0x16, 0xd8, 0x7c, 0xfd, 0x47,
 ];
 
+/// Exact fixed-width record length specified by `RISC0_STWO_DESIGN.md`.
+pub const RISC0_STWO_BINDING_V1_LEN: usize = 378;
+pub const RISC0_STWO_JOURNAL_TAG_V1: &[u8] = b"BarkZkBitvm/Risc0StwoJournalV1";
+pub const RISC0_STWO_BINDING_MAGIC_V1: [u8; 8] = *b"BARKSTO1";
+pub const RISC0_STWO_BINDING_VERSION_V1: u16 = 1;
+pub const BARK_SHINIGAMI_OUTPUT_SCHEMA_V3: u16 = 3;
+pub const BARK_SHINIGAMI_OUTPUT_WORD_COUNT_V3: u16 = 19;
+/// Golden-vector hashes for the deterministic fixture in this module's tests.
+/// The nested zkVM implementation can consume these strings without creating
+/// a Rust dependency cycle back to the showcase crate.
+pub const RISC0_STWO_BINDING_V1_TEST_VECTOR_RECORD_SHA256_HEX: &str =
+    "e4c8b299035a296c72f87801a36d9d84627d1756ffed1b3eb2004c48e10bebe4";
+pub const RISC0_STWO_BINDING_V1_TEST_VECTOR_JOURNAL_HEX: &str =
+    "cd8c15e1660af722cca79283386181c8bc5115077426e8d37feedb89a3eaba39";
+
+const STWO_CAIRO_COMMIT_V1: &str = "b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1";
+const PUBLIC_SEGMENT_PATCH_SHA256_V1: &str =
+    "ed5027b67ee3798ef2f1467604816cc5efb8e44cedf6083d329ae8f8e4227a71";
+const STWO_POLICY_DIGEST_V1: &str =
+    "cc48a057589ddbcf51c8458db65640609f21dac3afa485f717089806567dbece";
+const STARK252_MODULUS_BE: [u8; 32] = [
+    0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+];
+
+/// Host-retained, artifact-complete record committed by the v1 recursive
+/// STWO verifier journal. This is a separate profile from the legacy adapter's
+/// bare-statement journal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Risc0StwoBindingV1 {
+    pub stwo_cairo_git_commit: [u8; 20],
+    pub public_segment_patch_sha256: [u8; 32],
+    pub executable_sha256: [u8; 32],
+    pub stwo_program_hash_be: [u8; 32],
+    pub stwo_policy_digest: [u8; 32],
+    pub compressed_proof_len: u64,
+    pub compressed_proof_sha256: [u8; 32],
+    pub envelope_len: u32,
+    pub envelope_sha256: [u8; 32],
+    pub contract_nonce: [u8; 32],
+    pub bark_statement_digest: [u8; 32],
+    pub output_schema: u16,
+    pub output_word_count: u16,
+    pub output_prefix: [u32; 3],
+    pub full_output_sha256: [u8; 32],
+    pub expected_risc0_image_id: [u8; 32],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Risc0StwoBindingError {
+    StwoCommitMismatch,
+    PublicSegmentPatchMismatch,
+    StwoPolicyMismatch,
+    ZeroDigest(&'static str),
+    ZeroLength(&'static str),
+    ZeroContractNonce,
+    ZeroRisc0ImageId,
+    NonCanonicalStwoProgramHash,
+    OutputSchemaMismatch,
+    OutputWordCountMismatch,
+    OutputPrefixMismatch,
+}
+
+impl fmt::Display for Risc0StwoBindingError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::StwoCommitMismatch => write!(f, "STWO Cairo commit is not the v1 pin"),
+            Self::PublicSegmentPatchMismatch => {
+                write!(f, "public-segment patch hash is not the v1 pin")
+            }
+            Self::StwoPolicyMismatch => write!(f, "STWO policy digest is not the v1 pin"),
+            Self::ZeroDigest(field) => write!(f, "{field} must not be zero"),
+            Self::ZeroLength(field) => write!(f, "{field} must not be zero"),
+            Self::ZeroContractNonce => write!(f, "contract nonce must not be zero"),
+            Self::ZeroRisc0ImageId => write!(f, "RISC Zero image ID must not be zero"),
+            Self::NonCanonicalStwoProgramHash => {
+                write!(f, "STWO program hash is not a canonical Stark252 element")
+            }
+            Self::OutputSchemaMismatch => write!(f, "output schema is not v3"),
+            Self::OutputWordCountMismatch => write!(f, "output word count is not 19"),
+            Self::OutputPrefixMismatch => write!(f, "output prefix is not [1, 0, 0]"),
+        }
+    }
+}
+
+impl std::error::Error for Risc0StwoBindingError {}
+
+impl Risc0StwoBindingV1 {
+    pub fn validate(&self) -> Result<(), Risc0StwoBindingError> {
+        if self.stwo_cairo_git_commit != decode_hex20(STWO_CAIRO_COMMIT_V1) {
+            return Err(Risc0StwoBindingError::StwoCommitMismatch);
+        }
+        if self.public_segment_patch_sha256 != decode_hex32(PUBLIC_SEGMENT_PATCH_SHA256_V1) {
+            return Err(Risc0StwoBindingError::PublicSegmentPatchMismatch);
+        }
+        if self.stwo_policy_digest != decode_hex32(STWO_POLICY_DIGEST_V1) {
+            return Err(Risc0StwoBindingError::StwoPolicyMismatch);
+        }
+        for (field, digest) in [
+            ("executable_sha256", &self.executable_sha256),
+            ("compressed_proof_sha256", &self.compressed_proof_sha256),
+            ("envelope_sha256", &self.envelope_sha256),
+            ("bark_statement_digest", &self.bark_statement_digest),
+            ("full_output_sha256", &self.full_output_sha256),
+        ] {
+            if digest == &[0; 32] {
+                return Err(Risc0StwoBindingError::ZeroDigest(field));
+            }
+        }
+        if self.compressed_proof_len == 0 {
+            return Err(Risc0StwoBindingError::ZeroLength("compressed_proof_len"));
+        }
+        if self.envelope_len == 0 {
+            return Err(Risc0StwoBindingError::ZeroLength("envelope_len"));
+        }
+        if self.contract_nonce == [0; 32] {
+            return Err(Risc0StwoBindingError::ZeroContractNonce);
+        }
+        if self.expected_risc0_image_id == [0; 32] {
+            return Err(Risc0StwoBindingError::ZeroRisc0ImageId);
+        }
+        if self.stwo_program_hash_be == [0; 32] || self.stwo_program_hash_be >= STARK252_MODULUS_BE
+        {
+            return Err(Risc0StwoBindingError::NonCanonicalStwoProgramHash);
+        }
+        if self.output_schema != BARK_SHINIGAMI_OUTPUT_SCHEMA_V3 {
+            return Err(Risc0StwoBindingError::OutputSchemaMismatch);
+        }
+        if self.output_word_count != BARK_SHINIGAMI_OUTPUT_WORD_COUNT_V3 {
+            return Err(Risc0StwoBindingError::OutputWordCountMismatch);
+        }
+        if self.output_prefix != [1, 0, 0] {
+            return Err(Risc0StwoBindingError::OutputPrefixMismatch);
+        }
+        Ok(())
+    }
+
+    /// Canonical fixed-width little/big-endian encoding from the recursion
+    /// contract. There is no serde, ABI, or vector-length prefix.
+    pub fn canonical_bytes(
+        &self,
+    ) -> Result<[u8; RISC0_STWO_BINDING_V1_LEN], Risc0StwoBindingError> {
+        self.validate()?;
+        let mut out = [0u8; RISC0_STWO_BINDING_V1_LEN];
+        let mut cursor = 0;
+        let mut write = |bytes: &[u8]| {
+            let end = cursor + bytes.len();
+            out[cursor..end].copy_from_slice(bytes);
+            cursor = end;
+        };
+        write(&RISC0_STWO_BINDING_MAGIC_V1);
+        write(&RISC0_STWO_BINDING_VERSION_V1.to_le_bytes());
+        write(&self.stwo_cairo_git_commit);
+        write(&self.public_segment_patch_sha256);
+        write(&self.executable_sha256);
+        write(&self.stwo_program_hash_be);
+        write(&self.stwo_policy_digest);
+        write(&self.compressed_proof_len.to_le_bytes());
+        write(&self.compressed_proof_sha256);
+        write(&self.envelope_len.to_le_bytes());
+        write(&self.envelope_sha256);
+        write(&self.contract_nonce);
+        write(&self.bark_statement_digest);
+        write(&self.output_schema.to_le_bytes());
+        write(&self.output_word_count.to_le_bytes());
+        for word in self.output_prefix {
+            write(&word.to_be_bytes());
+        }
+        write(&self.full_output_sha256);
+        write(&self.expected_risc0_image_id);
+        debug_assert_eq!(cursor, RISC0_STWO_BINDING_V1_LEN);
+        Ok(out)
+    }
+
+    /// Exact 32-byte journal committed by the RISC Zero guest.
+    pub fn journal_digest(&self) -> Result<[u8; 32], Risc0StwoBindingError> {
+        let record = self.canonical_bytes()?;
+        let tag_hash = Sha256::digest(RISC0_STWO_JOURNAL_TAG_V1);
+        let mut hasher = Sha256::new();
+        hasher.update(tag_hash);
+        hasher.update(tag_hash);
+        hasher.update(record);
+        Ok(hasher.finalize().into())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BitvmProofError {
     NonCanonicalCoordinate { index: usize },
@@ -29,6 +215,9 @@ pub enum BitvmProofError {
     PointNotInSubgroup(&'static str),
     InvalidPinnedVerifierKey,
     JournalStatementMismatch,
+    JournalArtifactBindingMismatch,
+    Risc0ImageBindingMismatch,
+    InvalidRisc0StwoBinding(Risc0StwoBindingError),
     BoundlessClaimMismatch,
     Groth16VerificationFailed,
 }
@@ -61,6 +250,16 @@ impl fmt::Display for BitvmProofError {
                     "RISC Zero journal does not equal the Bark statement digest"
                 )
             }
+            Self::JournalArtifactBindingMismatch => write!(
+                f,
+                "RISC Zero journal does not equal the artifact-complete binding digest"
+            ),
+            Self::Risc0ImageBindingMismatch => {
+                write!(f, "RISC Zero image ID differs from the journal binding")
+            }
+            Self::InvalidRisc0StwoBinding(error) => {
+                write!(f, "invalid RISC Zero/STWO binding: {error}")
+            }
             Self::BoundlessClaimMismatch => write!(
                 f,
                 "Boundless claim digest does not bind the pinned image and Bark statement"
@@ -76,6 +275,12 @@ impl fmt::Display for BitvmProofError {
 }
 
 impl std::error::Error for BitvmProofError {}
+
+impl From<Risc0StwoBindingError> for BitvmProofError {
+    fn from(value: Risc0StwoBindingError) -> Self {
+        Self::InvalidRisc0StwoBinding(value)
+    }
+}
 
 /// Inputs accepted by `BitVM::chunk::api::generate_assertions` at official
 /// BitVM commit `7d1ca3660cac08aab62e76f3aa4daec0d7403ecc`.
@@ -123,6 +328,29 @@ pub fn verify_for_official_bitvm(
     }
     let expected_claim =
         expected_boundless_claim_digest(expected_risc0_image_id, expected_statement_digest)?;
+    if receipt.claim_digest() != &expected_claim {
+        return Err(BitvmProofError::BoundlessClaimMismatch);
+    }
+    verify_groth16_only(receipt)
+}
+
+/// Versioned artifact-complete adapter for the recursive STWO profile. The
+/// legacy `verify_for_official_bitvm` function intentionally retains its bare
+/// statement-journal behavior for existing demos.
+pub fn verify_artifact_complete_for_official_bitvm(
+    receipt: &Blake3Groth16Receipt,
+    expected_risc0_image_id: &[u8; 32],
+    binding: &Risc0StwoBindingV1,
+) -> Result<VerifiedBitvmGroth16Input, BitvmProofError> {
+    binding.validate()?;
+    if expected_risc0_image_id != &binding.expected_risc0_image_id {
+        return Err(BitvmProofError::Risc0ImageBindingMismatch);
+    }
+    let journal = binding.journal_digest()?;
+    if receipt.journal() != &journal {
+        return Err(BitvmProofError::JournalArtifactBindingMismatch);
+    }
+    let expected_claim = expected_boundless_claim_digest(expected_risc0_image_id, &journal)?;
     if receipt.claim_digest() != &expected_claim {
         return Err(BitvmProofError::BoundlessClaimMismatch);
     }
@@ -177,7 +405,7 @@ fn claim_bound_verifying_key(
 
 /// Recompute Boundless' public scalar from independently pinned inputs. This
 /// is the binding that prevents substituting an unrelated valid receipt.
-fn expected_boundless_claim_digest(
+pub(crate) fn expected_boundless_claim_digest(
     image_id: &[u8; 32],
     journal: &[u8; 32],
 ) -> Result<[u8; 32], BitvmProofError> {
@@ -218,6 +446,16 @@ fn expected_boundless_claim_digest(
 fn decode_hex32(value: &str) -> [u8; 32] {
     assert_eq!(value.len(), 64);
     let mut out = [0u8; 32];
+    for (index, byte) in out.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16)
+            .expect("pinned lowercase hex constant");
+    }
+    out
+}
+
+fn decode_hex20(value: &str) -> [u8; 20] {
+    assert_eq!(value.len(), 40);
+    let mut out = [0u8; 20];
     for (index, byte) in out.iter_mut().enumerate() {
         *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16)
             .expect("pinned lowercase hex constant");
@@ -371,6 +609,29 @@ mod tests {
         .unwrap()
     }
 
+    pub(crate) fn binding() -> Risc0StwoBindingV1 {
+        Risc0StwoBindingV1 {
+            stwo_cairo_git_commit: decode_hex20(STWO_CAIRO_COMMIT_V1),
+            public_segment_patch_sha256: decode_hex32(PUBLIC_SEGMENT_PATCH_SHA256_V1),
+            executable_sha256: [0x11; 32],
+            stwo_program_hash_be: decode_hex32(
+                "00bcd09f617edcfc9ee2bbbb74192f42dfed6b7a505578a3748ac93f8ad697f0",
+            ),
+            stwo_policy_digest: decode_hex32(STWO_POLICY_DIGEST_V1),
+            compressed_proof_len: 1_117_271,
+            compressed_proof_sha256: [0x22; 32],
+            envelope_len: 4096,
+            envelope_sha256: [0x33; 32],
+            contract_nonce: [0x44; 32],
+            bark_statement_digest: [0x55; 32],
+            output_schema: BARK_SHINIGAMI_OUTPUT_SCHEMA_V3,
+            output_word_count: BARK_SHINIGAMI_OUTPUT_WORD_COUNT_V3,
+            output_prefix: [1, 0, 0],
+            full_output_sha256: [0x66; 32],
+            expected_risc0_image_id: [0x77; 32],
+        }
+    }
+
     #[test]
     fn verifies_boundless_reference_receipt_and_emits_one_bitvm_scalar() {
         let input = verify_groth16_only(&receipt(&PROOF, &CLAIM)).unwrap();
@@ -431,6 +692,137 @@ mod tests {
         let prepared = ark_groth16::prepare_verifying_key(&wrong_key);
         assert!(
             !Groth16::<Bn254>::verify_proof(&prepared, verified.proof(), &[Fr::zero()]).unwrap()
+        );
+    }
+
+    #[test]
+    fn encodes_the_exact_artifact_complete_record_and_tagged_journal() {
+        let binding = binding();
+        let bytes = binding.canonical_bytes().unwrap();
+        assert_eq!(bytes.len(), RISC0_STWO_BINDING_V1_LEN);
+        assert_eq!(&bytes[..8], b"BARKSTO1");
+        assert_eq!(&bytes[8..10], &1u16.to_le_bytes());
+        assert_eq!(&bytes[158..166], &1_117_271u64.to_le_bytes());
+        assert_eq!(&bytes[198..202], &4096u32.to_le_bytes());
+        assert_eq!(&bytes[298..300], &3u16.to_le_bytes());
+        assert_eq!(&bytes[300..302], &19u16.to_le_bytes());
+        assert_eq!(&bytes[302..306], &1u32.to_be_bytes());
+        assert_eq!(&bytes[306..314], &[0; 8]);
+        assert_eq!(&bytes[346..378], &[0x77; 32]);
+
+        let tag = Sha256::digest(RISC0_STWO_JOURNAL_TAG_V1);
+        let expected: [u8; 32] =
+            Sha256::digest([tag.as_slice(), tag.as_slice(), &bytes].concat()).into();
+        assert_eq!(binding.journal_digest().unwrap(), expected);
+        assert_ne!(
+            binding.journal_digest().unwrap(),
+            binding.bark_statement_digest
+        );
+        assert_eq!(
+            Sha256::digest(bytes).as_slice(),
+            &decode_hex32(RISC0_STWO_BINDING_V1_TEST_VECTOR_RECORD_SHA256_HEX)
+        );
+        assert_eq!(
+            binding.journal_digest().unwrap(),
+            decode_hex32(RISC0_STWO_BINDING_V1_TEST_VECTOR_JOURNAL_HEX)
+        );
+    }
+
+    #[test]
+    fn every_security_relevant_binding_change_changes_the_journal() {
+        let binding = binding();
+        let base = binding.journal_digest().unwrap();
+
+        let mut changed = binding.clone();
+        changed.executable_sha256[0] ^= 1;
+        assert_ne!(changed.journal_digest().unwrap(), base);
+        changed = binding.clone();
+        changed.compressed_proof_sha256[0] ^= 1;
+        assert_ne!(changed.journal_digest().unwrap(), base);
+        changed = binding.clone();
+        changed.envelope_sha256[0] ^= 1;
+        assert_ne!(changed.journal_digest().unwrap(), base);
+        changed = binding.clone();
+        changed.contract_nonce[0] ^= 1;
+        assert_ne!(changed.journal_digest().unwrap(), base);
+        changed = binding.clone();
+        changed.bark_statement_digest[0] ^= 1;
+        assert_ne!(changed.journal_digest().unwrap(), base);
+        changed = binding.clone();
+        changed.full_output_sha256[0] ^= 1;
+        assert_ne!(changed.journal_digest().unwrap(), base);
+        changed = binding.clone();
+        changed.expected_risc0_image_id[0] ^= 1;
+        assert_ne!(changed.journal_digest().unwrap(), base);
+    }
+
+    #[test]
+    fn artifact_complete_adapter_rejects_image_journal_and_claim_substitution() {
+        let binding = binding();
+        let journal = binding.journal_digest().unwrap();
+        let claim =
+            expected_boundless_claim_digest(&binding.expected_risc0_image_id, &journal).unwrap();
+        let candidate = Blake3Groth16Receipt::parse_parts(
+            &BLAKE3_GROTH16_V0_1_SELECTOR,
+            &PROOF,
+            &journal,
+            &claim,
+            &[&claim],
+        )
+        .unwrap();
+
+        assert_eq!(
+            verify_artifact_complete_for_official_bitvm(&candidate, &[0x76; 32], &binding)
+                .unwrap_err(),
+            BitvmProofError::Risc0ImageBindingMismatch
+        );
+
+        let wrong_journal = receipt(&PROOF, &CLAIM);
+        assert_eq!(
+            verify_artifact_complete_for_official_bitvm(
+                &wrong_journal,
+                &binding.expected_risc0_image_id,
+                &binding,
+            )
+            .unwrap_err(),
+            BitvmProofError::JournalArtifactBindingMismatch
+        );
+
+        // The fixture proof is valid only for CLAIM, not the newly derived
+        // artifact-complete claim. Reaching this error shows all binding gates
+        // ran before real Groth16 verification rejected the substitution.
+        assert_eq!(
+            verify_artifact_complete_for_official_bitvm(
+                &candidate,
+                &binding.expected_risc0_image_id,
+                &binding,
+            )
+            .unwrap_err(),
+            BitvmProofError::Groth16VerificationFailed
+        );
+    }
+
+    #[test]
+    fn rejects_weaker_or_noncanonical_binding_profiles() {
+        let mut weak = binding();
+        weak.stwo_policy_digest[0] ^= 1;
+        assert_eq!(
+            weak.validate(),
+            Err(Risc0StwoBindingError::StwoPolicyMismatch)
+        );
+
+        let mut noncanonical = binding();
+        noncanonical.stwo_program_hash_be = STARK252_MODULUS_BE;
+        assert_eq!(
+            noncanonical.validate(),
+            Err(Risc0StwoBindingError::NonCanonicalStwoProgramHash)
+        );
+
+        let mut dishonest = binding();
+        dishonest.output_prefix = [1, 1, 1];
+        assert_eq!(
+            dishonest.validate(),
+            Err(Risc0StwoBindingError::OutputPrefixMismatch)
         );
     }
 

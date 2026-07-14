@@ -5,10 +5,13 @@
 
 use std::io::Read;
 
-use bzip2::read::BzDecoder;
-use cairo_air::verifier::verify_cairo;
+use bincode::Options;
+use bzip2::bufread::BzDecoder;
+use cairo_air::utils::get_verification_output;
+use cairo_air::verifier::{verify_cairo, INTERACTION_POW_BITS};
 use cairo_air::CairoProofForRustVerifier;
 use stwo::core::vcs_lifted::blake2_merkle::{Blake2sMerkleChannel, Blake2sMerkleHasher};
+use stwo_cairo_common::preprocessed_columns::preprocessed_trace::PreProcessedTraceVariant;
 
 use crate::{
     program_commitment_from_cells, stwo_policy_commitment, BindingError, RelationOutputV3,
@@ -21,9 +24,11 @@ pub const MAX_DECOMPRESSED_PROOF_BYTES: u64 = 512 * 1024 * 1024;
 #[derive(Debug)]
 pub enum VerifyError {
     Decompression(std::io::Error),
+    TrailingCompressedBytes { consumed: u64, actual: u64 },
     DecompressedProofTooLarge,
     Deserialization(Box<bincode::ErrorKind>),
     ProofRejected,
+    PolicyMismatch(&'static str),
     PublicOutputNotU32 { index: usize },
     OutputBinding(BindingError),
     PolicySerialization(Box<bincode::ErrorKind>),
@@ -34,16 +39,57 @@ pub enum VerifyError {
 /// program, STWO policy and `BarkShinigamiOutputV3`.
 pub fn verify_compressed_binary(compressed: &[u8]) -> Result<VerifiedExecution, VerifyError> {
     let mut decompressed = Vec::new();
-    BzDecoder::new(compressed)
+    let mut decoder = BzDecoder::new(compressed);
+    (&mut decoder)
         .take(MAX_DECOMPRESSED_PROOF_BYTES + 1)
         .read_to_end(&mut decompressed)
         .map_err(VerifyError::Decompression)?;
     if decompressed.len() as u64 > MAX_DECOMPRESSED_PROOF_BYTES {
         return Err(VerifyError::DecompressedProofTooLarge);
     }
+    let consumed = decoder.total_in();
+    if consumed != compressed.len() as u64 {
+        return Err(VerifyError::TrailingCompressedBytes {
+            consumed,
+            actual: compressed.len() as u64,
+        });
+    }
 
-    let proof: CairoProofForRustVerifier<Blake2sMerkleHasher> =
-        bincode::deserialize(&decompressed).map_err(VerifyError::Deserialization)?;
+    let proof: CairoProofForRustVerifier<Blake2sMerkleHasher> = bincode::DefaultOptions::new()
+        .with_fixint_encoding()
+        .with_limit(MAX_DECOMPRESSED_PROOF_BYTES)
+        .reject_trailing_bytes()
+        .deserialize(&decompressed)
+        .map_err(VerifyError::Deserialization)?;
+
+    let config = proof.stark_proof.config;
+    if proof.channel_salt != 0 {
+        return Err(VerifyError::PolicyMismatch("channel_salt"));
+    }
+    if config.pow_bits != 26 {
+        return Err(VerifyError::PolicyMismatch("pcs_pow_bits"));
+    }
+    if config.fri_config.log_blowup_factor != 1 {
+        return Err(VerifyError::PolicyMismatch("fri_log_blowup_factor"));
+    }
+    if config.fri_config.n_queries != 70 {
+        return Err(VerifyError::PolicyMismatch("fri_queries"));
+    }
+    if config.fri_config.log_last_layer_degree_bound != 0 {
+        return Err(VerifyError::PolicyMismatch("fri_last_layer_degree_log"));
+    }
+    if config.fri_config.fold_step != 1 {
+        return Err(VerifyError::PolicyMismatch("fri_fold_step"));
+    }
+    if config.lifting_log_size.is_some() {
+        return Err(VerifyError::PolicyMismatch("lifting_log_size"));
+    }
+    if proof.preprocessed_trace_variant != PreProcessedTraceVariant::Canonical {
+        return Err(VerifyError::PolicyMismatch("preprocessed_trace"));
+    }
+    if INTERACTION_POW_BITS != 24 {
+        return Err(VerifyError::PolicyMismatch("interaction_pow_bits"));
+    }
 
     // Extract only public values authenticated by the proof. Do this before
     // verify_cairo consumes the proof object, but do not return anything unless
@@ -63,6 +109,9 @@ pub fn verify_compressed_binary(compressed: &[u8]) -> Result<VerifiedExecution, 
         })
         .collect::<Result<Vec<_>, _>>()?;
     let output = RelationOutputV3::parse(&output_words).map_err(VerifyError::OutputBinding)?;
+    let stwo_program_hash_be = get_verification_output(&proof.claim.public_data.public_memory)
+        .program_hash
+        .to_bytes_be();
 
     let program_cells = proof
         .claim
@@ -90,6 +139,7 @@ pub fn verify_compressed_binary(compressed: &[u8]) -> Result<VerifiedExecution, 
 
     Ok(VerifiedExecution::from_cryptographic_verifier(
         output,
+        stwo_program_hash_be,
         program_commitment,
         policy_commitment,
     ))

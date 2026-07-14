@@ -16,6 +16,14 @@ emitted.
   cryptographic verifier adapter.
 - Native deserialization of the pinned compressed proof format, followed by
   the real `cairo_air::verifier::verify_cairo` call.
+- Strict rejection of bytes after the bzip2 stream and bytes after the one
+  canonical bincode object.
+- Exact enforcement of channel salt, PCS/FRI parameters, preprocessing mode,
+  interaction PoW and the authenticated STWO program hash.
+- Allocation-free parsing of the complete versioned guest-input frame and
+  canonical Bark envelope, including a typed RISC Zero image-ID handshake.
+- A fixed-width artifact-complete journal encoder cross-checked against the
+  outer adapter with a shared golden digest.
 - A 32-byte Boundless journal that can be constructed only when the proof,
   program pin, policy pin, transaction relation, chain state and operator
   authorization all succeed.
@@ -47,13 +55,13 @@ The native upstream adapter requires the pinned nightly:
 ```text
 rustup toolchain install nightly-2025-06-23
 cargo +nightly-2025-06-23 check --features upstream-stwo
-cargo +nightly-2025-06-23 test --features upstream-stwo --test real_proofs
+cargo +nightly-2025-06-23 test --features upstream-stwo
 ```
 
-The real-proof test reloads both checked-in compressed artifacts through the
-native adapter, calls upstream `verify_cairo`, checks the authenticated Bark
-statement digests, and confirms that their `1,0,0` outputs cannot emit an
-authorization journal.
+The native suite reloads both checked-in compressed artifacts through the
+adapter, calls upstream `verify_cairo`, checks the authenticated program hash
+and Bark statement digests, confirms that their `1,0,0` outputs cannot emit an
+authorization journal, and rejects compressed-stream and bincode trailers.
 
 Building `--features risc0-guest` for `riscv32im-risc0-zkvm-elf` intentionally
 stops at a compile error. At the pinned commit, `cairo-air` unconditionally

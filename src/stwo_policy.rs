@@ -2,6 +2,7 @@ use crate::envelope::tagged_sha256;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StwoPolicyV1 {
+    pub channel_salt: u8,
     pub pow_bits: u8,
     pub interaction_pow_bits: u8,
     pub log_blowup_factor: u8,
@@ -27,6 +28,7 @@ pub enum PreprocessedVariant {
 
 impl StwoPolicyV1 {
     pub const REQUIRED: Self = Self {
+        channel_salt: 0,
         pow_bits: 26,
         interaction_pow_bits: 24,
         log_blowup_factor: 1,
@@ -56,7 +58,7 @@ impl StwoPolicyV1 {
                 PreprocessedVariant::Canonical => 1,
                 PreprocessedVariant::Legacy => 2,
             },
-            0,
+            self.channel_salt,
         ]
     }
 
@@ -90,6 +92,10 @@ impl std::error::Error for StwoPolicyError {}
 mod tests {
     use super::*;
 
+    fn hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+    }
+
     #[test]
     fn exact_policy_is_required() {
         assert!(StwoPolicyV1::REQUIRED.enforce().is_ok());
@@ -107,5 +113,25 @@ mod tests {
         changed = StwoPolicyV1::REQUIRED;
         changed.preprocessed_variant = PreprocessedVariant::Legacy;
         assert!(changed.enforce().is_err());
+
+        changed = StwoPolicyV1::REQUIRED;
+        changed.channel_salt = 1;
+        assert!(changed.enforce().is_err());
+        assert_ne!(changed.digest(), StwoPolicyV1::REQUIRED.digest());
+    }
+
+    #[test]
+    fn checked_in_policy_receipt_matches_canonical_bytes_and_digest() {
+        let receipt: serde_json::Value =
+            serde_json::from_str(include_str!("../proof-evidence/stwo-policy-v1.json")).unwrap();
+        assert_eq!(receipt["channel_salt"], 0);
+        assert_eq!(receipt["pcs_pow_bits"], 26);
+        assert_eq!(receipt["interaction_pow_bits"], 24);
+        assert_eq!(receipt["fri_queries"], 70);
+        assert_eq!(
+            receipt["canonical_bytes_hex"],
+            hex(&StwoPolicyV1::REQUIRED.canonical_bytes())
+        );
+        assert_eq!(receipt["digest"], hex(&StwoPolicyV1::REQUIRED.digest()));
     }
 }

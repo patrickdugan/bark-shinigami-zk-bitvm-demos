@@ -294,7 +294,9 @@ The guest or the next verifier layer must reject all of the following:
 ## Current artifact audit
 
 The repository currently contains two real, internally verified compressed
-STWO proofs:
+STWO proofs. The reload adapter now enforces the exact checked-in
+`StwoPolicyV1`, rejects compressed and decompressed trailers, and exposes the
+authenticated program hash:
 
 | Fixture | Bytes | SHA-256 |
 | --- | ---: | --- |
@@ -319,39 +321,36 @@ data is:
    `c778fef8a5d34c0fad7b3f77b52a1ce94a6bfcb5e0b6939a6de723ee23f0b4e2`.
    Equivalence must not be assumed. Publish the exact run artifact in an
    immutable GitHub release.
-2. **The proof parameter record is inferred from default CLI behavior.** There
-   is no checked-in canonical parameter file or decoded proof-policy receipt,
-   and `StwoPolicyV1` currently omits channel salt from its canonical bytes.
-3. **The checked-in checksum file omits the executable and argument files.** The
+2. **The checked-in checksum file omits the executable and argument files.** The
    workflow pinned them, but `proof-evidence/SHA256SUMS.txt` contains only
-   proofs and measurements.
-4. **Windows working-tree bytes are not a canonical artifact encoding.** The
+   proofs, measurements, verified outputs, and the canonical policy receipt.
+3. **Windows working-tree bytes are not a canonical artifact encoding.** The
    challenge and CET argument files currently contain CRLF locally while the
    workflow hashes canonical LF bytes. Release hashes must name exact bytes and
    must not depend on checkout conversion.
-5. **The proved envelopes pin an unavailable RISC Zero image ID of all zeroes.**
+4. **The proved envelopes pin an unavailable RISC Zero image ID of all zeroes.**
    Final recursive proofs require a nonzero guest image ID and regeneration of
    the Cairo executable, arguments, and STWO proofs under the non-circular build
    order above.
-6. **The RISC Zero crate is a fail-closed scaffold, not a guest artifact.**
-   `risc0-stwo-verifier/` can parse the 19 output words and has a native adapter
-   to the real upstream verifier, but `cairo-air` is not RV32-compatible and the
-   zkVM build intentionally stops at `compile_error!`. Its guest policy pins are
-   zero, its input is only proof bytes, and it does not yet bind executable
-   bytes, envelope bytes, nonce, exact policy values, or the journal record in
-   this document. There is no ELF, image ID, execution receipt, or measured
-   cycle/memory bound.
-7. **No Boundless receipt exists for this guest/journal.** There is no request,
+5. **The RISC Zero crate is a fail-closed scaffold, not a guest artifact.**
+   `risc0-stwo-verifier/` now strictly parses the complete framed input and Bark
+   envelope, performs a typed image-ID handshake, implements the fixed-width
+   journal record, and has a native adapter to the real upstream verifier. The
+   guest binary does not yet call those complete bindings: `cairo-air` is not
+   RV32-compatible, the zkVM build intentionally stops at `compile_error!`, and
+   its policy pins remain zero. There is no ELF, image ID, execution receipt, or
+   measured cycle/memory bound. `RISC0_RV32_PORT_AUDIT.md` records the real
+   target failures: an SDK/toolchain mismatch and host-only `sonic-rs` in the
+   unconditional Cairo-AIR graph.
+6. **No Boundless receipt exists for this guest/journal.** There is no request,
    real 260-byte selectable seal, reconstructed claim, or locally verified
    claim digest.
-8. **The current Rust outer adapter expects the 32-byte journal to equal the bare
-   Bark statement digest.** This design instead requires the artifact-complete
-   `J`; `src/bitvm2_proof.rs` and `src/bitvm2_manifest.rs` must be versioned and
-   updated before they can consume such a receipt.
-9. **No canonical claim-specialized key artifact or actual BitVM graph exists.**
-    The algebraic specialization is implemented in Rust, but its key bytes,
-    hash, official chunker output, Taproot root, transactions, Core relay
-    results, and watcher-disprove run are absent.
+7. **No canonical claim-specialized key artifact or actual BitVM graph exists.**
+   The versioned outer adapter and manifest now consume the artifact-complete
+   journal, algebraically specialize the key, double-verify it with zero BitVM
+   runtime input, and hash-check a caller-provided key artifact. Canonical key
+   serialization, official chunker output, Taproot root, transactions, Core
+   relay results, and watcher-disprove run are still absent.
 
 Until every missing item is produced and independently checked, receipts remain
 `not_enforced` and `operator_take_authorized` remains false.

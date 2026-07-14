@@ -75,7 +75,7 @@ jobs:
             test "$(jq -r '.security_boundary.funded' <<<"${receipt}")" = false
           done
 
-      - name: Reverify both proofs through the native STWO adapter
+      - name: Reverify proofs and run the native STWO adversarial boundary
         shell: bash
         run: |
           set -euxo pipefail
@@ -83,5 +83,4 @@ jobs:
           cargo +nightly-2025-06-23 test \
             --locked \
             --manifest-path risc0-stwo-verifier/Cargo.toml \
-            --features upstream-stwo \
-            --test real_proofs
+            --features upstream-stwo

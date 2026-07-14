@@ -56,7 +56,7 @@ graph has passed Bitcoin Core relay/package testing.
 
 ## Executed gates
 
-- Rust all-target suite: 64 tests passed (39 library, 3 fixture, 4 adversarial
+- Rust all-target suite: 73 tests passed (48 library, 3 fixture, 4 adversarial
   corpus, 11 BitVMX, 7 STWO-evidence); zero failed.
 - Boundless/BitVM adapter: official reference receipt accepted; proof mutation,
   field alias, unrelated receipt, image mutation, statement mutation, and
@@ -82,7 +82,9 @@ graph has passed Bitcoin Core relay/package testing.
   program hash
   `0xbcd09f617edcfc9ee2bbbb74192f42dfed6b7a505578a3748ac93f8ad697f0`
   and exact 19-felt outputs beginning `1, 0, 0`. A one-byte serialized-proof
-  mutation was rejected.
+  mutation, a compressed-stream trailer, and a bincode-object trailer were
+  rejected. The adapter also rejects any policy parameter outside the pinned
+  channel-salt/PoW/FRI/preprocessing profile.
 - Seven new evidence-boundary tests reject proof tampering, cross-case
   substitution, stale fixed-proof replay against a fresh nonce, incomplete
   checksum coverage, and any attempt to treat checksum provenance as
@@ -102,14 +104,17 @@ the two fixed valid fixtures, but the relation still deliberately reports
 `chain_state_verified = 0`. It has no authenticated header chain, confirmation,
 or UTXO-inclusion proof. The Cairo/STWO verifier must be ported to a
 verifier-only RISC Zero RV32IM guest; upstream Cairo verifier crates currently
-include `std`, Rayon, portable SIMD, filesystem, and prover-only dependencies.
+include unconditional host `std`, filesystem, Rayon, CLI, compression and
+diagnostic dependencies. The SIMD prover module is feature-gated and is not the
+primary blocker.
 After a real Boundless proof, the claim-specialized BitVM scripts still need a
 complete bond assertion/disprove/take graph, Bitcoin Core regtest package
 acceptance, and a fresh permissionless-watcher disprove. Until all of those
 artifacts exist, every receipt remains `not_enforced` and
 `operator_take_authorized=false`.
 
-The new RISC Zero verifier crate is intentionally a scaffold: its portable
-binding layer has seven passing tests and its native adapter calls the real
-upstream verifier, but the guest policy pins remain zero and RV32 compilation
-is a deliberate error until the Cairo-AIR verifier-only port is completed.
+The RISC Zero verifier crate remains a scaffold: its portable/no-std boundary
+has 15 passing tests, its exact-nightly native suite has 18, and its adapter
+calls the real upstream verifier. The guest binary still has zero policy pins
+and RV32 compilation remains blocked until the Cairo-AIR verifier-only port is
+completed.
