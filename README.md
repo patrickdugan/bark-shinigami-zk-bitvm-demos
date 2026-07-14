@@ -26,12 +26,16 @@ never authorizes the operator-take path.
   announcement/attestation, outcome, payout table, and exact output matching.
   The fixture oracle secret is intentionally public and is not a production
   trust root.
-- A Shinigami-invoking Cairo relation scaffold. It executes Shinigami and
-  computes the same tagged statement digest, but deliberately emits
-  `accepted = 0` until a strict envelope parser links every engine input inside
-  Cairo. Scarb currently also rejects Shinigami's
-  `sha256_process_block_syscall`, because syscalls are unsupported in Cairo
-  executables. `verify-cairo-tapout.ps1` asserts that exact reviewed blocker.
+- A STWO-executable Shinigami relation with Alexandria's pinned pure-Cairo
+  SHA-256, strict envelope and canonical Bitcoin transaction parsers,
+  Shinigami's BIP341 sighash, and Garaga's pure-Cairo secp256k1 verifier. It
+  emits `accepted = 1` only after binding the owner signature to the exact Bark
+  spend; the CET case additionally verifies the pinned oracle announcement and
+  attestation and binds every payout to a transaction output.
+- Fixture-specific Bark policy pins for regtest genesis, VTXO/anchor hashes,
+  owner leaf/control block, Shinigami relation ID, and STWO policy. This is a
+  showcase relation for the checked-in Bark vector, not a generic replacement
+  for Shinigami's full Bitcoin Script engine.
 - Exact `StwoPolicyV1` pinning: Blake2s, PoW 26, interaction PoW 24, blowup 1,
   70 queries, last-layer degree 0, fold step 1, no lifting log size, and the
   canonical preprocessed trace variant.
@@ -84,15 +88,13 @@ it is not the ZK-BitVM security boundary.
 
 Before any positive signet label, the remaining gates are:
 
-1. port Shinigami's SHA-256 path to STWO-compatible software, implement the
-   strict Cairo envelope parser, and remove forced `accepted = 0` only after
-   native/Cairo differential agreement;
-2. generate the new STWO proof under exactly `StwoPolicyV1`;
-3. build the RISC Zero STWO-verifier guest with dev receipts disabled;
-4. obtain and verify a real Boundless Blake3Groth16 receipt on Sepolia;
-5. build BitVM2 and BitVMX candidates and require every transaction to pass
+1. generate the new STWO proof under exactly `StwoPolicyV1` on a sufficiently
+   large Linux host;
+2. build the RISC Zero STWO-verifier guest with dev receipts disabled;
+3. obtain and verify a real Boundless Blake3Groth16 receipt on Sepolia;
+4. build BitVM2 and BitVMX candidates and require every transaction to pass
    Bitcoin Core 31.1 consensus and `testmempoolaccept`;
-6. exercise a fresh permissionless watcher slash on regtest and public signet.
+5. exercise a fresh permissionless watcher slash on regtest and public signet.
 
 If an enforcement backend misses its relay/resource/watcher gates, it is a
 tap-out for that backend. If both miss, the showcase publishes no enforcement

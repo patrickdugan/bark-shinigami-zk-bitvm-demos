@@ -25,3 +25,7 @@ path = "src/bin/owner_exit_challenge.rs"
 [[bin]]
 name = "virtual_cet_guard"
 path = "src/bin/virtual_cet_guard.rs"
+
+[[bin]]
+name = "cairo_fixture"
+path = "src/bin/cairo_fixture.rs"

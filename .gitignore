@@ -5,6 +5,8 @@
 /cairo-shinigami/target/
 /.env
 /.env.*
+/.python310/
+/.venv-garaga/
 *.key
 *.pem
 *.proof.json

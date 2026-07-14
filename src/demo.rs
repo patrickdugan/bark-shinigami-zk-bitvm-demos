@@ -20,8 +20,16 @@ use crate::envelope::{
 };
 use crate::stwo_policy::StwoPolicyV1;
 
-pub const SHINIGAMI_COMMIT: &str = "7e8c05d60b4bd7ae91ddc18a42e8e13090286f0c";
-pub const REQUIRED_SCRIPT_FLAGS: u32 = 0x0000_000f;
+pub const SHINIGAMI_COMMIT: &str = "565d7c7375bd090047137da702b2bfdcd48ec58d";
+pub const CAIRO_RELATION_ID: &str = concat!(
+    "bark-shinigami-relation-v3;",
+    "shinigami=565d7c7375bd090047137da702b2bfdcd48ec58d;",
+    "garaga=0e986ba5133c16a30ac86a7cd07c9551787d0e91;",
+    "alexandria=6d2cfcc0954c8d7796f028b25336faa8e9378da8",
+);
+/// Consensus-critical minimum profile used by the specialized relation:
+/// CHECKSEQUENCEVERIFY | WITNESS | TAPROOT.
+pub const REQUIRED_SCRIPT_FLAGS: u32 = 0x0001_1010;
 const BOARD_OWNER_SECRET: &str = "fab9e598081a3e74b2233d470c4ad87bcc285b6912ed929568e62ac0e9409879";
 const ORACLE_SECRET: &str = "7ad15c6334b6d38b9cd97f6afc3fc00620dfbc2add7f17fd673d14631467680f";
 const DESTINATION_A_SECRET: &str =
@@ -388,7 +396,7 @@ pub fn build_receipt(case: DemoCase) -> Value {
             "reason": validation.reason,
         },
         "proof_pipeline": {
-            "shinigami_relation": "blocked: Shinigami SHA-256 lowers to a syscall unsupported by Cairo executables; relation is also forced accepted=0 until its canonical parser is complete",
+            "shinigami_relation": "ready: syscall-free SHA-256, strict envelope/transaction policy, Shinigami BIP341, and constrained Garaga BIP340 checks execute successfully; a verified STWO proof artifact is still required",
             "accepted_for_authorization": false,
             "stwo_policy_digest": hex(&StwoPolicyV1::REQUIRED.digest()),
             "risc0_receipt": "unavailable",
@@ -542,8 +550,8 @@ fn artifact_pins() -> ArtifactPins {
             SHINIGAMI_COMMIT.as_bytes(),
         ),
         cairo_program: tagged_sha256(
-            "BarkZkBitvm/CairoSourceV1",
-            include_bytes!("../cairo-shinigami/src/lib.cairo"),
+            "BarkZkBitvm/CairoRelationIdV1",
+            CAIRO_RELATION_ID.as_bytes(),
         ),
         stwo_policy: StwoPolicyV1::REQUIRED.digest(),
         // A real RISC Zero image ID must replace this before a receipt can pass.

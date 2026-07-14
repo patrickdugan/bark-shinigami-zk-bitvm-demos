@@ -2,13 +2,23 @@
 version = 1
 
 [[package]]
+name = "alexandria_math"
+version = "0.10.0"
+source = "git+https://github.com/keep-starknet-strange/alexandria.git?rev=6d2cfcc0954c8d7796f028b25336faa8e9378da8#6d2cfcc0954c8d7796f028b25336faa8e9378da8"
+
+[[package]]
 name = "bark_shinigami_relation"
 version = "0.1.0"
 dependencies = [
+ "garaga",
  "shinigami_engine",
- "shinigami_tests",
  "shinigami_utils",
 ]
+
+[[package]]
+name = "garaga"
+version = "0.18.1"
+source = "git+https://github.com/keep-starknet-strange/garaga.git?rev=0e986ba5133c16a30ac86a7cd07c9551787d0e91#0e986ba5133c16a30ac86a7cd07c9551787d0e91"
 
 [[package]]
 name = "ripemd160"
@@ -21,18 +31,9 @@ version = "0.1.0"
 source = "git+https://github.com/j1mbo64/sha1_cairo.git#2b65bc00a829bdcc244c140d0f31feda32f8d2c4"
 
 [[package]]
-name = "shinigami_compiler"
-version = "0.1.0"
-source = "git+https://github.com/starkware-bitcoin/shinigami.git?rev=7e8c05d60b4bd7ae91ddc18a42e8e13090286f0c#7e8c05d60b4bd7ae91ddc18a42e8e13090286f0c"
-dependencies = [
- "shinigami_engine",
- "shinigami_utils",
-]
-
-[[package]]
 name = "shinigami_engine"
 version = "0.1.0"
-source = "git+https://github.com/starkware-bitcoin/shinigami.git?rev=7e8c05d60b4bd7ae91ddc18a42e8e13090286f0c#7e8c05d60b4bd7ae91ddc18a42e8e13090286f0c"
+source = "git+https://github.com/patrickdugan/shinigami.git?rev=565d7c7375bd090047137da702b2bfdcd48ec58d#565d7c7375bd090047137da702b2bfdcd48ec58d"
 dependencies = [
  "ripemd160",
  "sha1",
@@ -40,17 +41,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "shinigami_tests"
-version = "0.1.0"
-source = "git+https://github.com/starkware-bitcoin/shinigami.git?rev=7e8c05d60b4bd7ae91ddc18a42e8e13090286f0c#7e8c05d60b4bd7ae91ddc18a42e8e13090286f0c"
-dependencies = [
- "ripemd160",
- "shinigami_compiler",
- "shinigami_engine",
- "shinigami_utils",
-]
-
-[[package]]
 name = "shinigami_utils"
 version = "0.1.0"
-source = "git+https://github.com/starkware-bitcoin/shinigami.git?rev=7e8c05d60b4bd7ae91ddc18a42e8e13090286f0c#7e8c05d60b4bd7ae91ddc18a42e8e13090286f0c"
+source = "git+https://github.com/patrickdugan/shinigami.git?rev=565d7c7375bd090047137da702b2bfdcd48ec58d#565d7c7375bd090047137da702b2bfdcd48ec58d"
+dependencies = [
+ "alexandria_math",
+]
