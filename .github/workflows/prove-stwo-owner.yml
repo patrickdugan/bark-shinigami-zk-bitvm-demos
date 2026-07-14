@@ -1,0 +1,113 @@
+name: Prove STWO owner relation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/stwo-shinigami-enforcement
+    paths:
+      - .github/workflows/prove-stwo-owner.yml
+      - cairo-shinigami/**
+      - proof-inputs/owner_exit_allow.arguments.json
+      - stwo-cairo-public-segments.patch
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stwo-owner-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prove-owner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+      STWO_CAIRO_COMMIT: b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1
+      EXPECTED_ARGUMENTS_SHA256: 567e34c007b91211087d37433e45cf392570c05ebd269330fd6b2f73317ff399
+      EXPECTED_PATCH_SHA256: 0409da2904e07a38b37030c0a45f050efb59847f2b70f16bf50ee14cfe35f551
+
+    steps:
+      - name: Check out exact showcase commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Record runner resources
+        shell: bash
+        run: |
+          set -euxo pipefail
+          lscpu
+          free -h
+          df -h
+
+      - name: Install Scarb 2.18.0
+        uses: software-mansion/setup-scarb@2a96b748888e3329ee44ac9ac073d930e692b3cd
+        with:
+          scarb-version: 2.18.0
+
+      - name: Build the pinned Cairo executable
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd cairo-shinigami
+          scarb fmt --check
+          scarb build
+          sha256sum target/dev/bark_shinigami_relation.executable.json
+
+      - name: Verify immutable prover inputs
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "${EXPECTED_ARGUMENTS_SHA256}  proof-inputs/owner_exit_allow.arguments.json" | sha256sum --check
+          echo "${EXPECTED_PATCH_SHA256}  stwo-cairo-public-segments.patch" | sha256sum --check
+
+      - name: Build patched STWO Cairo prover
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rustup toolchain install nightly-2025-06-23 --profile minimal
+          git clone --filter=blob:none https://github.com/starkware-libs/stwo-cairo.git stwo-cairo
+          git -C stwo-cairo checkout "${STWO_CAIRO_COMMIT}"
+          git -C stwo-cairo apply "${GITHUB_WORKSPACE}/stwo-cairo-public-segments.patch"
+          git -C stwo-cairo diff --check
+          cd stwo-cairo/stwo_cairo_prover
+          RUSTFLAGS="-C target-cpu=native -C opt-level=3" \
+            cargo +nightly-2025-06-23 build --release \
+              -p stwo-cairo-dev-utils --bin run_and_prove
+
+      - name: Generate and internally verify the STWO proof
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p proofs
+          /usr/bin/time -v -o proofs/owner_exit_allow.metrics.txt \
+            stwo-cairo/stwo_cairo_prover/target/release/run_and_prove \
+              --program cairo-shinigami/target/dev/bark_shinigami_relation.executable.json \
+              --program_type executable \
+              --program_arguments_file proof-inputs/owner_exit_allow.arguments.json \
+              --proof_path proofs/owner_exit_allow.stwo.bin \
+              --proof-format binary \
+              --verify
+          sha256sum \
+            cairo-shinigami/target/dev/bark_shinigami_relation.executable.json \
+            proof-inputs/owner_exit_allow.arguments.json \
+            proofs/owner_exit_allow.stwo.bin \
+            stwo-cairo-public-segments.patch \
+            | tee proofs/SHA256SUMS
+          cat proofs/owner_exit_allow.metrics.txt
+
+      - name: Upload verified proof and measurements
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: owner-exit-stwo-${{ github.sha }}
+          path: |
+            proofs/owner_exit_allow.stwo.bin
+            proofs/owner_exit_allow.metrics.txt
+            proofs/SHA256SUMS
+            cairo-shinigami/target/dev/bark_shinigami_relation.executable.json
+            proof-inputs/owner_exit_allow.arguments.json
+            stwo-cairo-public-segments.patch
+          if-no-files-found: error
+          retention-days: 14
