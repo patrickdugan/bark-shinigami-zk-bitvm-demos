@@ -1,7 +1,8 @@
 # RISC Zero RV32 verifier-port audit
 
-Status: **not buildable yet; fail closed**. This audit removes no verification
-check and does not introduce a host-supplied acceptance value.
+Status: **verifier-only patch implemented; RV32 CI pending; fail closed**. This
+audit removes no verification check and introduces no host-supplied acceptance
+value.
 
 ## Reproduced boundary
 
@@ -103,3 +104,67 @@ replace `verify_cairo` with a Boolean, a host attestation, or a development
 receipt. A compile-only CI job should pin all four versions (RISC Zero Rust,
 SDK, STWO, and `stwo-cairo`) so an incompatible latest toolchain cannot mask a
 real regression.
+
+## Checked-in verifier-only patch
+
+`stwo-cairo-risc0-verifier-only.patch` is an application-ready diff against
+`b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1`. It feature-gates `cairo-air`
+host utilities and `stwo-cairo-common`'s prover-only Pedersen table
+materialization. In `verifier.rs`, it replaces pretty-JSON diagnostics in the
+verifier-only build but leaves the exact `uses >= PRIME` rejection intact. It
+does not modify AIR components, the Fiat-Shamir channel, PCS or FRI logic. Its
+SHA-256 is
+`3624ce654927a66082b36caf47f5a0ac62a51179d92897b89c62d587a615c719`.
+
+Apply and validate it from a clean pinned `stwo-cairo` checkout:
+
+```text
+git checkout --detach b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1
+git apply --check /path/to/stwo-cairo-risc0-verifier-only.patch
+git apply /path/to/stwo-cairo-risc0-verifier-only.patch
+cargo +nightly-2025-06-23 fmt \
+  --manifest-path stwo_cairo_prover/Cargo.toml \
+  --package cairo-air -- --check
+cargo +nightly-2025-06-23 check \
+  --manifest-path stwo_cairo_prover/Cargo.toml \
+  --package cairo-air
+cargo +nightly-2025-06-23 check \
+  --manifest-path stwo_cairo_prover/Cargo.toml \
+  --package cairo-air --no-default-features --features verifier
+cargo +nightly-2025-06-23 check \
+  --manifest-path stwo_cairo_prover/Cargo.toml \
+  --package stwo-cairo-common --features prover
+```
+
+All four native validation commands passed against the pinned checkout. The
+default build still includes the existing proof-file and CLI surface. The
+verifier-only build excludes bincode, bzip2, Clap, `serde_json`, `sonic-rs`
+and Rayon, eliminating the confirmed RV32 pointer-width failure and
+prover-threading surface while retaining the real verifier. The existing
+`prover` feature still compiles the Pedersen tables and Rayon path.
+
+The GitHub RV32 probe, on an Ubuntu runner with official RISC Zero Rust, is:
+
+```text
+rzup install rust r0.1.88.0
+cargo +risc0 check \
+  --manifest-path stwo_cairo_prover/Cargo.toml \
+  --package cairo-air --no-default-features --features verifier \
+  --target riscv32im-risc0-zkvm-elf
+```
+
+For a full `risc0-zkvm 3.0.4` guest rather than the isolated `cairo-air`
+probe, also configure the target's getrandom backend:
+
+```toml
+[target.riscv32im-risc0-zkvm-elf]
+rustflags = ['--cfg', 'getrandom_backend="custom"']
+```
+
+The dedicated `RISC Zero RV32 verifier port` GitHub workflow applies the patch
+to a clean pinned checkout, asserts its exact file scope and unchanged
+relation-use predicate, rejects host-only dependencies from the RV32 graph,
+and compiles the full guest around the real `verify_cairo` call. The local
+RV32 dependency compile was intentionally stopped before completion; the next
+exact blocker, if any, belongs in that GitHub log and must not be bypassed with
+a mock verifier.

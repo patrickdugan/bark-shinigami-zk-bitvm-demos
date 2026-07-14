@@ -41,6 +41,10 @@ boolean.
 | RISC Zero | `3.0.4` |
 | Proof format | bzip2-compressed bincode `CairoProofForRustVerifier<Blake2sMerkleHasher>` |
 
+The checked-in target configuration selects RISC Zero's required custom
+`getrandom` backend for `riscv32im-risc0-zkvm-elf`; it has no effect on native
+builds.
+
 ## Commands
 
 The claim and journal layer is portable and testable now:
@@ -63,15 +67,13 @@ adapter, calls upstream `verify_cairo`, checks the authenticated program hash
 and Bark statement digests, confirms that their `1,0,0` outputs cannot emit an
 authorization journal, and rejects compressed-stream and bincode trailers.
 
-Building `--features risc0-guest` for `riscv32im-risc0-zkvm-elf` intentionally
-stops at a compile error. At the pinned commit, `cairo-air` unconditionally
-includes `std::fs`, Rayon and portable-SIMD/prover modules. The STWO core
-verifier supports `no_std`, but the Cairo-specific verifier has not yet been
-split into an RV32-compatible crate. Removing this error without completing and
-reviewing that port would turn a visible missing verifier into an unsafe gap.
+The checked-in guest still stops at a deliberate compile guard. The repository
+now includes `../stwo-cairo-risc0-verifier-only.patch`, which gates host file
+utilities, JSON diagnostics, Rayon and Pedersen table materialization while
+leaving the real verifier and its relation bounds intact. The dedicated GitHub
+RV32 workflow applies that patch to the exact upstream commit and compiles the
+full guest with RISC Zero Rust 1.88.0.
 
-The minimum upstream work is to feature-gate file utilities, Rayon and
-`prover_types::simd`; move the scalar claim types needed by the verifier into a
-verifier-only module; use `stwo` and `stwo-constraint-framework` without default
-features; and cross-compile the resulting real verifier before replacing the
-zero policy pins in the guest.
+The guard and zero policy pins remain until that cross-compile passes and both
+checked-in STWO proofs execute inside the guest. A compile success alone is not
+an operator authorization and does not create a receipt.

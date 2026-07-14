@@ -1,9 +1,10 @@
 # RISC Zero recursion contract for the Shinigami STWO relation
 
 Status: design specification, not an enforcement claim. A fail-closed RISC Zero
-guest scaffold now exists, but it deliberately cannot compile for RV32 and does
-not satisfy this contract. No receipt, Boundless request, or BitVM transaction
-graph satisfying this document exists yet.
+guest scaffold and reviewable upstream verifier-only patch now exist; the
+checked-in guest remains guarded pending the dedicated RV32 cross-compile and
+does not yet satisfy this contract. No receipt, Boundless request, or BitVM
+transaction graph satisfying this document exists yet.
 
 This document defines one public statement from the compressed STWO proof all
 the way to the claim-specialized BitVM Groth16 key. It deliberately binds exact

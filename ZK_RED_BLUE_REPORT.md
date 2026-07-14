@@ -102,11 +102,11 @@ $scarb = 'D:\_tools\scarb-v2.18.0\scarb-v2.18.0-x86_64-pc-windows-msvc\bin\scarb
 No operator take is enabled. The inner STWO proving barrier is now cleared for
 the two fixed valid fixtures, but the relation still deliberately reports
 `chain_state_verified = 0`. It has no authenticated header chain, confirmation,
-or UTXO-inclusion proof. The Cairo/STWO verifier must be ported to a
-verifier-only RISC Zero RV32IM guest; upstream Cairo verifier crates currently
-include unconditional host `std`, filesystem, Rayon, CLI, compression and
-diagnostic dependencies. The SIMD prover module is feature-gated and is not the
-primary blocker.
+or UTXO-inclusion proof. A checked-in upstream patch now separates the
+Cairo/STWO verifier from host filesystem, Rayon, CLI, compression and JSON
+diagnostic dependencies; its dedicated GitHub RV32 cross-compile still has to
+pass. The SIMD prover module was already feature-gated and was not the primary
+blocker.
 After a real Boundless proof, the claim-specialized BitVM scripts still need a
 complete bond assertion/disprove/take graph, Bitcoin Core regtest package
 acceptance, and a fresh permissionless-watcher disprove. Until all of those
@@ -116,5 +116,5 @@ artifacts exist, every receipt remains `not_enforced` and
 The RISC Zero verifier crate remains a scaffold: its portable/no-std boundary
 has 15 passing tests, its exact-nightly native suite has 18, and its adapter
 calls the real upstream verifier. The guest binary still has zero policy pins
-and RV32 compilation remains blocked until the Cairo-AIR verifier-only port is
-completed.
+and remains compile-guarded until the Cairo-AIR verifier-only port passes the
+full RV32 guest job.

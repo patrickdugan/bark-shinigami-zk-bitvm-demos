@@ -1,0 +1,115 @@
+name: RISC Zero RV32 verifier port
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/stwo-shinigami-enforcement
+    paths:
+      - .github/workflows/risc0-rv32-port.yml
+      - RISC0_RV32_PORT_AUDIT.md
+      - stwo-cairo-risc0-verifier-only.patch
+      - risc0-stwo-verifier/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: risc0-rv32-port-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile-real-verifier-guest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
+      STWO_CAIRO_COMMIT: b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1
+      RISC0_RUST_RELEASE: r0.1.88.0
+
+    steps:
+      - name: Check out exact showcase commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install the SDK-matched RISC Zero Rust toolchain
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl --proto '=https' --tlsv1.2 -LsSf https://risczero.com/install | bash
+          echo "${HOME}/.risc0/bin" >> "${GITHUB_PATH}"
+          "${HOME}/.risc0/bin/rzup" install rust "${RISC0_RUST_RELEASE}"
+          rustc +risc0 --version | tee /tmp/risc0-rust-version.txt
+          grep -F 'rustc 1.88.0' /tmp/risc0-rust-version.txt
+
+      - name: Apply only the verifier packaging patch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --filter=blob:none https://github.com/starkware-libs/stwo-cairo.git "${RUNNER_TEMP}/stwo-cairo"
+          git -C "${RUNNER_TEMP}/stwo-cairo" checkout --detach "${STWO_CAIRO_COMMIT}"
+          git -C "${RUNNER_TEMP}/stwo-cairo" apply --check "${GITHUB_WORKSPACE}/stwo-cairo-risc0-verifier-only.patch"
+          git -C "${RUNNER_TEMP}/stwo-cairo" apply "${GITHUB_WORKSPACE}/stwo-cairo-risc0-verifier-only.patch"
+          git -C "${RUNNER_TEMP}/stwo-cairo" diff --check
+
+          actual="$(git -C "${RUNNER_TEMP}/stwo-cairo" diff --name-only)"
+          expected=$'stwo_cairo_prover/Cargo.lock\nstwo_cairo_prover/crates/cairo-air/Cargo.toml\nstwo_cairo_prover/crates/cairo-air/src/utils.rs\nstwo_cairo_prover/crates/cairo-air/src/verifier.rs\nstwo_cairo_prover/crates/common/Cargo.toml\nstwo_cairo_prover/crates/common/src/preprocessed_columns/mod.rs\nstwo_cairo_prover/crates/common/src/preprocessed_columns/pedersen.rs'
+          test "${actual}" = "${expected}"
+          grep -F '.filter(|(_, &uses)| uses >= PRIME.into())' \
+            "${RUNNER_TEMP}/stwo-cairo/stwo_cairo_prover/crates/cairo-air/src/verifier.rs"
+
+      - name: Prepare an isolated full-guest compile probe
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp -R risc0-stwo-verifier "${RUNNER_TEMP}/risc0-stwo-verifier-port"
+          export PORT_MANIFEST="${RUNNER_TEMP}/risc0-stwo-verifier-port/Cargo.toml"
+          export PORT_LIB="${RUNNER_TEMP}/risc0-stwo-verifier-port/src/lib.rs"
+          export CAIRO_AIR="${RUNNER_TEMP}/stwo-cairo/stwo_cairo_prover/crates/cairo-air"
+          export CAIRO_COMMON="${RUNNER_TEMP}/stwo-cairo/stwo_cairo_prover/crates/common"
+
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          manifest_path = Path(os.environ["PORT_MANIFEST"])
+          manifest = manifest_path.read_text()
+          old_air = 'cairo-air = { git = "https://github.com/starkware-libs/stwo-cairo.git", rev = "b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1", default-features = false, optional = true }'
+          new_air = f'cairo-air = {{ path = "{os.environ["CAIRO_AIR"]}", default-features = false, features = ["verifier"], optional = true }}'
+          old_common = 'stwo-cairo-common = { git = "https://github.com/starkware-libs/stwo-cairo.git", rev = "b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1", default-features = false, optional = true }'
+          new_common = f'stwo-cairo-common = {{ path = "{os.environ["CAIRO_COMMON"]}", default-features = false, optional = true }}'
+          assert manifest.count(old_air) == 1
+          assert manifest.count(old_common) == 1
+          manifest_path.write_text(manifest.replace(old_air, new_air).replace(old_common, new_common))
+
+          lib_path = Path(os.environ["PORT_LIB"])
+          lib = lib_path.read_text()
+          guard = '''#[cfg(all(feature = "upstream-stwo", target_os = "zkvm"))]
+          compile_error!(
+              "pinned cairo-air b1acf8b is not RISC Zero RV32-compatible: port its verifier-only claim/AIR modules before building this guest"
+          );
+          '''
+          assert lib.count(guard) == 1
+          lib_path.write_text(lib.replace(guard, ""))
+          PY
+
+      - name: Reject host-only verifier dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cargo +risc0 tree \
+            --manifest-path "${RUNNER_TEMP}/risc0-stwo-verifier-port/Cargo.toml" \
+            --features risc0-guest \
+            --target riscv32im-risc0-zkvm-elf \
+            --edges normal > "${RUNNER_TEMP}/rv32-tree.txt"
+          ! grep -E '(^| )sonic-rs v|(^| )clap v|(^| )serde_json v|(^| )rayon v' "${RUNNER_TEMP}/rv32-tree.txt"
+
+      - name: Compile the real STWO verifier call into the RV32 guest
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cargo +risc0 check \
+            --manifest-path "${RUNNER_TEMP}/risc0-stwo-verifier-port/Cargo.toml" \
+            --features risc0-guest \
+            --target riscv32im-risc0-zkvm-elf \
+            --bin bark-stwo-guest
