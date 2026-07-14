@@ -175,6 +175,9 @@ jobs:
           cd "${RUNNER_TEMP}/risc0-stwo-verifier-port"
           output="${RUNNER_TEMP}/risc0-stwo-evidence"
           mkdir -p "${output}"
+          # RV32IM has no A extension. Keep these trace-only linker flags until
+          # every remaining compiler atomic ABI reference is attributed.
+          export RUSTFLAGS='--cfg getrandom_backend="custom" -C link-arg=--trace-symbol=__atomic_load_4 -C link-arg=--trace-symbol=__atomic_store_4 -C link-arg=--trace-symbol=__atomic_load_1 -C link-arg=--trace-symbol=__atomic_store_1 -C link-arg=--trace-symbol=__atomic_compare_exchange_1'
           set +e
           cargo +risc0 build \
             --locked \
@@ -204,6 +207,7 @@ jobs:
               "error: linking with",
               "error: could not compile",
               "undefined symbol",
+              "__atomic_",
               "overflowed by",
               "will not fit in region",
           )
