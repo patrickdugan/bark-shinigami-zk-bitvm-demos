@@ -1,6 +1,6 @@
 # Active ZK/BitVM red-blue report
 
-Date: 2026-07-13
+Date: 2026-07-14
 
 Scope: `BarkSpendEnvelopeV1`, the Shinigami Cairo executable, the
 Boundless-Groth16 adapter, and the intended official BitVM chunker boundary.
@@ -56,7 +56,7 @@ graph has passed Bitcoin Core relay/package testing.
 
 ## Executed gates
 
-- Rust all-target suite: 56 tests passed (38 library, 3 fixture, 4 adversarial
+- Rust all-target suite: 57 tests passed (39 library, 3 fixture, 4 adversarial
   corpus, 11 BitVMX); zero failed.
 - Boundless/BitVM adapter: official reference receipt accepted; proof mutation,
   field alias, unrelated receipt, image mutation, statement mutation, and
@@ -65,6 +65,18 @@ graph has passed Bitcoin Core relay/package testing.
 - Honest owner and CET executions both emitted the prefix `1, 0, 0`.
 - Executable Cairo red gate: false heights stayed `1, 0, 0`; attacker RISC Zero
   image and phantom prevout amount aborted.
+- GitHub Actions run
+  [`29304103188`](https://github.com/patrickdugan/bark-shinigami-zk-bitvm-demos/actions/runs/29304103188)
+  built pinned STWO commit `b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1`.
+  The fixed owner-exit and virtual-CET relations produced binary proofs and
+  passed STWO's internal verifier. The dishonest output mutation exited 1 at
+  Cairo `ASSERT_EQ` and left no proof.
+- Owner proof: 1,117,271 bytes, SHA-256
+  `3917b6d9fc6b53aef98221a37962034af5109c16036ede06dd16275d94696072`,
+  39.54 seconds, 15,188,892 KiB peak RSS.
+- CET proof: 1,149,083 bytes, SHA-256
+  `27918852ae2590972f7401873b9f888a459de6a030c2e1c2bc082512e8cdc87e`,
+  1:41.77, 15,442,736 KiB peak RSS.
 
 Reproduce the executable red gate with:
 
@@ -75,11 +87,14 @@ $scarb = 'D:\_tools\scarb-v2.18.0\scarb-v2.18.0-x86_64-pc-windows-msvc\bin\scarb
 
 ## Remaining fail-closed boundary
 
-No operator take is enabled. A real remote STWO proof still needs a 64-128 GB
-CPU host. The Cairo/STWO verifier must then be ported to a verifier-only RISC
-Zero RV32IM guest; upstream Cairo verifier crates currently include `std`,
-Rayon, portable SIMD, filesystem, and prover-only dependencies. After a real
-Boundless proof, the claim-specialized BitVM scripts still need a complete
-bond assertion/disprove/take graph, Bitcoin Core regtest package acceptance,
-and a fresh permissionless-watcher disprove. Until all of those artifacts
-exist, every receipt remains `not_enforced` and `operator_take_authorized=false`.
+No operator take is enabled. The inner STWO proving barrier is now cleared for
+the two fixed valid fixtures, but the relation still deliberately reports
+`chain_state_verified = 0`. It has no authenticated header chain, confirmation,
+or UTXO-inclusion proof. The Cairo/STWO verifier must be ported to a
+verifier-only RISC Zero RV32IM guest; upstream Cairo verifier crates currently
+include `std`, Rayon, portable SIMD, filesystem, and prover-only dependencies.
+After a real Boundless proof, the claim-specialized BitVM scripts still need a
+complete bond assertion/disprove/take graph, Bitcoin Core regtest package
+acceptance, and a fresh permissionless-watcher disprove. Until all of those
+artifacts exist, every receipt remains `not_enforced` and
+`operator_take_authorized=false`.

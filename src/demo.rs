@@ -21,6 +21,8 @@ use crate::envelope::{
 use crate::stwo_policy::StwoPolicyV1;
 
 pub const SHINIGAMI_COMMIT: &str = "565d7c7375bd090047137da702b2bfdcd48ec58d";
+pub const CAIRO_EXECUTABLE_SHA256: &str =
+    "5b1e4c7c4a545b5ee34c06d672cfa1d4e3e38b732951c60a65a5dcdaba4b5c22";
 pub const CAIRO_RELATION_ID: &str = concat!(
     "bark-shinigami-relation-v4-chain-state-fail-closed;",
     "shinigami=565d7c7375bd090047137da702b2bfdcd48ec58d;",
@@ -380,6 +382,25 @@ pub fn build_receipt(case: DemoCase) -> Value {
     }
     .required_bond_sats()
     .expect("fixture bond arithmetic");
+    let reference_stwo_evidence = match case {
+        DemoCase::OwnerExitAllow => json!({
+            "status": "verified_fixed_fixture",
+            "arguments_sha256": "d7d629bfadbd990307930c0c9aade202a746696503cd488f616d75a82779dd8b",
+            "proof_sha256": "3917b6d9fc6b53aef98221a37962034af5109c16036ede06dd16275d94696072",
+            "proof_path": "proof-evidence/owner_exit_allow.stwo.bin",
+        }),
+        DemoCase::OwnerExitChallenge => json!({
+            "status": "rejected_before_proof",
+            "arguments_sha256": "dc1e58f1473925abcd4409dacb2019f3c2b2db16d28e00fa8cdee5dd118da691",
+            "proof_sha256": Value::Null,
+        }),
+        DemoCase::VirtualCetGuard => json!({
+            "status": "verified_fixed_fixture",
+            "arguments_sha256": "58cdc15ebe5725b3a0b694cde16a83356c1c8ca16c741ca9d80ec7aff2bc807f",
+            "proof_sha256": "27918852ae2590972f7401873b9f888a459de6a030c2e1c2bc082512e8cdc87e",
+            "proof_path": "proof-evidence/virtual_cet_guard.stwo.bin",
+        }),
+    };
     json!({
         "schema": "bark-zk-bitvm-showcase-v3",
         "case_id": case.id(),
@@ -399,7 +420,10 @@ pub fn build_receipt(case: DemoCase) -> Value {
             "reason": validation.reason,
         },
         "proof_pipeline": {
-            "shinigami_relation": "ready: syscall-free SHA-256, strict envelope/transaction policy, Shinigami BIP341, and constrained Garaga BIP340 checks execute successfully; chain state is deliberately unproven and a verified STWO proof artifact is still required",
+            "shinigami_relation": "proved for the two checked-in valid fixtures with syscall-free SHA-256, strict envelope/transaction policy, Shinigami BIP341, and constrained Garaga BIP340; the dishonest fixture aborts before proof generation",
+            "cairo_executable_sha256": CAIRO_EXECUTABLE_SHA256,
+            "reference_fixture": reference_stwo_evidence,
+            "current_instance_stwo_proof": "not_generated_for_fresh_nonce",
             "accepted_for_authorization": false,
             "stwo_policy_digest": hex(&StwoPolicyV1::REQUIRED.digest()),
             "risc0_receipt": "unavailable",
@@ -408,7 +432,7 @@ pub fn build_receipt(case: DemoCase) -> Value {
         },
         "bitvm_enforcement": {
             "status": "not_enforced",
-            "reason": "no real Boundless receipt and no relay-tested BitVM graph are present",
+            "reason": "the inner STWO proofs do not authenticate Bitcoin chain state; no recursive RISC Zero/Boundless receipt or relay-tested BitVM graph is present",
             "operator_take_authorized": false,
             "protected_object": "operator bond/reimbursement UTXO",
             "bitvm2": "blocked_missing_real_receipt_and_core_relay_results",
@@ -624,6 +648,26 @@ mod tests {
             outcome[0] ^= 1;
         }
         assert!(!validate_host(&changed).exact_spend_valid);
+    }
+
+    #[test]
+    fn fixed_stwo_evidence_never_authorizes_a_fresh_demo_instance() {
+        for case in [DemoCase::OwnerExitAllow, DemoCase::VirtualCetGuard] {
+            let receipt = build_receipt(case);
+            assert_eq!(
+                receipt["proof_pipeline"]["reference_fixture"]["status"],
+                "verified_fixed_fixture"
+            );
+            assert_eq!(
+                receipt["proof_pipeline"]["current_instance_stwo_proof"],
+                "not_generated_for_fresh_nonce"
+            );
+            assert_eq!(receipt["bitvm_enforcement"]["status"], "not_enforced");
+            assert_eq!(
+                receipt["bitvm_enforcement"]["operator_take_authorized"],
+                false
+            );
+        }
     }
 
     #[test]

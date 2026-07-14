@@ -6,9 +6,12 @@ remains a generic Rust-to-Cairo claim encoder; proof-market and BitVM code lives
 here. All publication and provenance rules in this showcase are GitHub-only.
 
 The implementation is fail-closed. It does **not** claim mainnet readiness or
-on-chain ZK enforcement. A real Boundless receipt and a relay-tested BitVM
-transaction graph do not yet exist, so every demo reports `not_enforced` and
-never authorizes the operator-take path.
+on-chain ZK enforcement. Real STWO proofs now exist for the two fixed valid
+fixtures, and the dishonest fixture is rejected before proof generation. Those
+inner proofs do not authenticate Bitcoin chain state and are not recursively
+verified by RISC Zero, Boundless, or Bitcoin. A real Boundless receipt and a
+relay-tested BitVM transaction graph do not yet exist, so every demo still
+reports `not_enforced` and never authorizes the operator-take path.
 
 ## What is implemented
 
@@ -42,6 +45,11 @@ never authorizes the operator-take path.
 - Exact `StwoPolicyV1` pinning: Blake2s, PoW 26, interaction PoW 24, blowup 1,
   70 queries, last-layer degree 0, fold step 1, no lifting log size, and the
   canonical preprocessed trace variant.
+- Reproducible binary STWO proof vectors for the fixed owner-exit and virtual
+  CET fixtures. GitHub Actions built STWO commit `b1acf8bf...`, proved both,
+  ran its internal verifier, and required the dishonest output mutation to
+  fail without emitting a proof. The proofs and measurements are checked in
+  under [`proof-evidence/`](proof-evidence/README.md).
 - Strict Boundless `Blake3Groth16V0_1` parsing: selector `62f049f6`, 32-byte
   journal, 256-byte raw proof, one canonical BN254 public scalar, and
   claim-specific BitVM2 GitHub provenance checks.
@@ -59,16 +67,19 @@ never authorizes the operator-take path.
 ## Three use cases
 
 `owner_exit_allow` constructs and verifies a valid Bark pubkey-VTXO owner exit.
-It can enter the proof pipeline, but cannot authorize a bond take without the
-real outer proof and BitVM graph.
+Its fixed reference vector has a verified STWO proof. Each live run uses a fresh
+nonce and therefore needs a new proof; neither can authorize a bond take
+without authenticated chain state, the outer proof, and the BitVM graph.
 
 `owner_exit_challenge` changes the signed output amount without resigning. The
 statement digest changes and the Taproot signature check rejects the dishonest
-operator assertion.
+operator assertion. The remote STWO gate confirms that Cairo aborts and leaves
+no proof artifact.
 
 `virtual_cet_guard` constructs a valid Bark owner spend whose outputs are bound
 to the test oracle event, outcome, signatures, and payout table. Mutating any
-of those inputs rejects it.
+of those inputs rejects it. Its fixed reference vector also has a verified STWO
+proof.
 
 Run from this directory:
 
@@ -102,8 +113,8 @@ The current executable-Cairo and outer-boundary findings are recorded in
 
 Before any positive signet label, the remaining gates are:
 
-1. generate the new STWO proof under exactly `StwoPolicyV1` on a sufficiently
-   large Linux host;
+1. add authenticated Bitcoin header-chain, confirmation, and UTXO-inclusion
+   evidence to the proven relation;
 2. port the Cairo/STWO verifier to a verifier-only RISC Zero RV32IM guest and
    build it with dev receipts disabled (upstream Cairo verifier dependencies are
    not guest-compatible as-is);
