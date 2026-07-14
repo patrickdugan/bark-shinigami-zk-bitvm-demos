@@ -26,7 +26,8 @@ jobs:
       CARGO_INCREMENTAL: 0
       CARGO_NET_GIT_FETCH_WITH_CLI: true
       STWO_CAIRO_COMMIT: b1acf8bfd9fda45e7c2c28553b750f87aefeb9b1
-      RISC0_RUST_RELEASE: r0.1.88.0
+      # rzup takes the Rust version; its backing GitHub release is r0.1.88.0.
+      RISC0_RUST_VERSION: 1.88.0
 
     steps:
       - name: Check out exact showcase commit
@@ -38,7 +39,7 @@ jobs:
           set -euxo pipefail
           curl --proto '=https' --tlsv1.2 -LsSf https://risczero.com/install | bash
           echo "${HOME}/.risc0/bin" >> "${GITHUB_PATH}"
-          "${HOME}/.risc0/bin/rzup" install rust "${RISC0_RUST_RELEASE}"
+          "${HOME}/.risc0/bin/rzup" install rust "${RISC0_RUST_VERSION}"
           rustc +risc0 --version | tee /tmp/risc0-rust-version.txt
           grep -F 'rustc 1.88.0' /tmp/risc0-rust-version.txt
 

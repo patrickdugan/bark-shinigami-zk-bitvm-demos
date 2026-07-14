@@ -146,7 +146,7 @@ prover-threading surface while retaining the real verifier. The existing
 The GitHub RV32 probe, on an Ubuntu runner with official RISC Zero Rust, is:
 
 ```text
-rzup install rust r0.1.88.0
+rzup install rust 1.88.0  # installs backing release r0.1.88.0
 cargo +risc0 check \
   --manifest-path stwo_cairo_prover/Cargo.toml \
   --package cairo-air --no-default-features --features verifier \
