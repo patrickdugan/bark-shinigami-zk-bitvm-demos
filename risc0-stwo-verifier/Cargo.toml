@@ -21,7 +21,7 @@ upstream-stwo = [
     "dep:stwo",
     "dep:stwo-cairo-common",
 ]
-risc0-guest = ["std", "dep:risc0-zkvm", "upstream-stwo"]
+risc0-guest = ["std", "dep:risc0-zkvm", "risc0-zkvm/std", "upstream-stwo"]
 
 [dependencies]
 sha2 = { version = "=0.10.9", default-features = false }

@@ -2,9 +2,6 @@
 use risc0_zkvm::guest::env;
 
 #[cfg(target_os = "zkvm")]
-risc0_zkvm::guest::entry!(main);
-
-#[cfg(target_os = "zkvm")]
 fn main() {
     use bark_risc0_stwo_verifier::{upstream_stwo, VerificationPolicy};
 

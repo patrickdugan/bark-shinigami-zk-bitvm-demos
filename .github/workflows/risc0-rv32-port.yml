@@ -95,6 +95,11 @@ jobs:
           PY
 
           cd "$(dirname "${PORT_MANIFEST}")"
+          # The STWO/Cairo verifier needs the zkVM's partial std. With that
+          # feature enabled, RISC Zero supplies the entrypoint and panic
+          # handler; using guest::entry! would select its no_std bootstrap too.
+          grep -F '"risc0-zkvm/std"' "${PORT_MANIFEST}"
+          ! grep -F 'guest::entry!' src/bin/bark_stwo_guest.rs
           cargo +risc0 update \
             --manifest-path "${PORT_MANIFEST}" \
             --package enum-ordinalize \
